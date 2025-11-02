@@ -192,7 +192,10 @@ func (u *UI) makeCustomersTab() fyne.CanvasObject {
 
 func (u *UI) makeInvoicesTab() fyne.CanvasObject {
 	u.invoiceDetailText = widget.NewRichTextFromMarkdown("_Select an invoice to view details._")
+	u.invoiceDetailText.Wrapping = fyne.TextWrapWord
 	detailCard := widget.NewCard("Invoice Details", "", u.invoiceDetailText)
+	detailCardScroll := container.NewVScroll(detailCard)
+	detailCardScroll.SetMinSize(fyne.NewSize(0, 0))
 
 	u.invoiceList = widget.NewList(
 		func() int { return len(u.invoiceSummaries) },
@@ -229,7 +232,7 @@ func (u *UI) makeInvoicesTab() fyne.CanvasObject {
 
 	split := container.NewHSplit(
 		container.NewMax(u.invoiceList),
-		container.NewMax(detailCard),
+		container.NewMax(detailCardScroll),
 	)
 	split.SetOffset(0.34)
 
