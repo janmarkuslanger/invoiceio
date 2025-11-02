@@ -9,7 +9,10 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/data/validation"
 	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/layout"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/janmarkuslanger/invoiceio/internal/id"
@@ -28,55 +31,23 @@ type UI struct {
 	invoices         []models.Invoice
 	invoiceSummaries []string
 
-	profileList  *widget.List
-	customerList *widget.List
-	invoiceList  *widget.List
+	profileList       *widget.List
+	profileDetailText *widget.RichText
+	profileEditButton *widget.Button
+	selectedProfile   int
 
-	profileDisplayName *widget.Entry
-	profileCompanyName *widget.Entry
-	profileAddress1    *widget.Entry
-	profileAddress2    *widget.Entry
-	profileCity        *widget.Entry
-	profilePostalCode  *widget.Entry
-	profileCountry     *widget.Entry
-	profileEmail       *widget.Entry
-	profilePhone       *widget.Entry
-	profileTaxID       *widget.Entry
-	profileBankName    *widget.Entry
-	profileIBAN        *widget.Entry
-	profileBIC         *widget.Entry
-	profilePayment     *widget.Entry
-	profileForm        *widget.Form
-	profileEditingID   string
-	selectedProfile    int
+	customerList       *widget.List
+	customerDetailText *widget.RichText
+	customerEditButton *widget.Button
+	selectedCustomer   int
 
-	customerDisplayName *widget.Entry
-	customerContactName *widget.Entry
-	customerEmail       *widget.Entry
-	customerPhone       *widget.Entry
-	customerAddress1    *widget.Entry
-	customerAddress2    *widget.Entry
-	customerCity        *widget.Entry
-	customerPostalCode  *widget.Entry
-	customerCountry     *widget.Entry
-	customerNotes       *widget.Entry
-	customerForm        *widget.Form
-	customerEditingID   string
-	selectedCustomer    int
+	invoiceList       *widget.List
+	invoiceDetailText *widget.RichText
+	invoiceEditButton *widget.Button
+	selectedInvoice   int
 
-	invoiceProfileSelect  *widget.Select
-	invoiceCustomerSelect *widget.Select
-	invoiceIssueDate      *widget.Entry
-	invoiceDueDate        *widget.Entry
-	invoiceTaxRate        *widget.Entry
-	invoiceNotes          *widget.Entry
-	invoiceItems          []models.InvoiceItem
-	invoiceItemsList      *widget.List
-	invoiceTotalsLabel    *widget.Label
-	invoiceDetails        *widget.Label
-	invoiceForm           *widget.Form
-	invoiceEditingID      string
-	selectedInvoice       int
+	lastProfileID  string
+	lastCustomerID string
 }
 
 // New initialises a UI helper bound to the given storage and window.
@@ -99,99 +70,32 @@ func (u *UI) Build() fyne.CanvasObject {
 	tabs := container.NewAppTabs(profilesTab, customersTab, invoicesTab)
 	tabs.SetTabLocation(container.TabLocationTop)
 
+	newProfileButton := widget.NewButtonWithIcon("New Profile", theme.AccountIcon(), func() {
+		u.openProfileDialog(nil)
+	})
+	newCustomerButton := widget.NewButtonWithIcon("New Customer", theme.AccountIcon(), func() {
+		u.openCustomerDialog(nil)
+	})
+	newInvoiceButton := widget.NewButtonWithIcon("New Invoice", theme.DocumentCreateIcon(), func() {
+		if len(u.profiles) == 0 || len(u.customers) == 0 {
+			dialog.ShowInformation("Setup required", "Create at least one profile and one customer first.", u.win)
+			return
+		}
+		u.openInvoiceDialog(nil)
+	})
+	toolbar := container.NewHBox(newProfileButton, newCustomerButton, newInvoiceButton, layout.NewSpacer())
+	top := container.NewVBox(toolbar, widget.NewSeparator())
+
 	u.refreshProfiles()
 	u.refreshCustomers()
 	u.refreshInvoices()
 
-	return tabs
+	return container.NewBorder(top, nil, nil, nil, tabs)
 }
 
 func (u *UI) makeProfilesTab() fyne.CanvasObject {
-	u.profileDisplayName = widget.NewEntry()
-	u.profileCompanyName = widget.NewEntry()
-	u.profileAddress1 = widget.NewEntry()
-	u.profileAddress2 = widget.NewEntry()
-	u.profileCity = widget.NewEntry()
-	u.profilePostalCode = widget.NewEntry()
-	u.profileCountry = widget.NewEntry()
-	u.profileEmail = widget.NewEntry()
-	u.profilePhone = widget.NewEntry()
-	u.profileTaxID = widget.NewEntry()
-	u.profileBankName = widget.NewEntry()
-	u.profileIBAN = widget.NewEntry()
-	u.profileBIC = widget.NewEntry()
-	u.profilePayment = widget.NewEntry()
-
-	u.profileForm = widget.NewForm(
-		widget.NewFormItem("Display Name", u.profileDisplayName),
-		widget.NewFormItem("Company Name", u.profileCompanyName),
-		widget.NewFormItem("Address Line 1", u.profileAddress1),
-		widget.NewFormItem("Address Line 2", u.profileAddress2),
-		widget.NewFormItem("City", u.profileCity),
-		widget.NewFormItem("Postal Code", u.profilePostalCode),
-		widget.NewFormItem("Country", u.profileCountry),
-		widget.NewFormItem("Email", u.profileEmail),
-		widget.NewFormItem("Phone", u.profilePhone),
-		widget.NewFormItem("Tax ID", u.profileTaxID),
-		widget.NewFormItem("Bank Name", u.profileBankName),
-		widget.NewFormItem("IBAN", u.profileIBAN),
-		widget.NewFormItem("BIC", u.profileBIC),
-		widget.NewFormItem("Payment Terms", u.profilePayment),
-	)
-	u.profileForm.SubmitText = "Save Profile"
-	u.profileForm.CancelText = "Clear"
-	u.profileForm.OnSubmit = func() {
-		if strings.TrimSpace(u.profileDisplayName.Text) == "" {
-			dialog.ShowError(fmt.Errorf("display name is required"), u.win)
-			return
-		}
-		now := time.Now()
-		profileID := u.profileEditingID
-		if profileID == "" {
-			profileID = id.New()
-		}
-		createdAt := now
-		if u.profileEditingID != "" {
-			if existing, err := u.store.GetProfile(u.profileEditingID); err == nil {
-				createdAt = existing.CreatedAt
-			}
-		}
-		profile := models.Profile{
-			ID:           profileID,
-			DisplayName:  strings.TrimSpace(u.profileDisplayName.Text),
-			CompanyName:  strings.TrimSpace(u.profileCompanyName.Text),
-			AddressLine1: strings.TrimSpace(u.profileAddress1.Text),
-			AddressLine2: strings.TrimSpace(u.profileAddress2.Text),
-			City:         strings.TrimSpace(u.profileCity.Text),
-			PostalCode:   strings.TrimSpace(u.profilePostalCode.Text),
-			Country:      strings.TrimSpace(u.profileCountry.Text),
-			Email:        strings.TrimSpace(u.profileEmail.Text),
-			Phone:        strings.TrimSpace(u.profilePhone.Text),
-			TaxID:        strings.TrimSpace(u.profileTaxID.Text),
-			PaymentDetails: models.PaymentDetails{
-				BankName:     strings.TrimSpace(u.profileBankName.Text),
-				IBAN:         strings.TrimSpace(u.profileIBAN.Text),
-				BIC:          strings.TrimSpace(u.profileBIC.Text),
-				PaymentTerms: strings.TrimSpace(u.profilePayment.Text),
-			},
-			CreatedAt: createdAt,
-			UpdatedAt: now,
-		}
-		if err := u.store.SaveProfile(profile); err != nil {
-			dialog.ShowError(err, u.win)
-			return
-		}
-		if u.profileEditingID != "" {
-			dialog.ShowInformation("Profile updated", fmt.Sprintf("Profile %s updated.", profile.DisplayName), u.win)
-		} else {
-			dialog.ShowInformation("Profile saved", fmt.Sprintf("Profile %s stored.", profile.DisplayName), u.win)
-		}
-		u.resetProfileForm()
-		u.refreshProfiles()
-	}
-	u.profileForm.OnCancel = func() {
-		u.resetProfileForm()
-	}
+	u.profileDetailText = widget.NewRichTextFromMarkdown("_Select a profile to view details._")
+	detailCard := widget.NewCard("Profile Details", "", u.profileDetailText)
 
 	u.profileList = widget.NewList(
 		func() int { return len(u.profiles) },
@@ -201,144 +105,45 @@ func (u *UI) makeProfilesTab() fyne.CanvasObject {
 				return
 			}
 			p := u.profiles[id]
-			obj.(*widget.Label).SetText(fmt.Sprintf("%s (%s) – %s, %s %s", p.DisplayName, p.CompanyName, p.AddressLine1, p.PostalCode, p.City))
+			obj.(*widget.Label).SetText(fmt.Sprintf("%s – %s", p.DisplayName, strings.TrimSpace(p.CompanyName)))
 		},
 	)
 	u.profileList.OnSelected = func(id widget.ListItemID) {
-		u.selectedProfile = id
-	}
-
-	editButton := widget.NewButton("Edit Selected", func() {
-		if u.selectedProfile < 0 || u.selectedProfile >= len(u.profiles) {
-			dialog.ShowInformation("Select profile", "Please choose a profile in the list first.", u.win)
+		if id < 0 || id >= len(u.profiles) {
 			return
 		}
-		u.loadProfileForEdit(u.profiles[u.selectedProfile])
+		u.selectedProfile = id
+		u.updateProfileDetail()
+		u.profileEditButton.Enable()
+	}
+
+	newButton := widget.NewButtonWithIcon("New Profile", themePlusIcon(), func() {
+		u.openProfileDialog(nil)
 	})
+	u.profileEditButton = widget.NewButton("Edit Selected", func() {
+		if u.selectedProfile < 0 || u.selectedProfile >= len(u.profiles) {
+			return
+		}
+		profile := u.profiles[u.selectedProfile]
+		u.openProfileDialog(&profile)
+	})
+	u.profileEditButton.Disable()
 
-	actionBar := container.NewHBox(editButton)
+	actionBar := container.NewHBox(newButton, u.profileEditButton)
 
-	return container.NewBorder(u.profileForm, actionBar, nil, nil, container.NewVScroll(u.profileList))
-}
+	split := container.NewHSplit(
+		container.NewMax(u.profileList),
+		container.NewMax(detailCard),
+	)
+	split.SetOffset(0.34)
 
-func (u *UI) resetProfileForm() {
-	u.profileEditingID = ""
-	if u.profileDisplayName != nil {
-		u.profileDisplayName.SetText("")
-	}
-	u.profileCompanyName.SetText("")
-	u.profileAddress1.SetText("")
-	u.profileAddress2.SetText("")
-	u.profileCity.SetText("")
-	u.profilePostalCode.SetText("")
-	u.profileCountry.SetText("")
-	u.profileEmail.SetText("")
-	u.profilePhone.SetText("")
-	u.profileTaxID.SetText("")
-	u.profileBankName.SetText("")
-	u.profileIBAN.SetText("")
-	u.profileBIC.SetText("")
-	u.profilePayment.SetText("")
-	if u.profileForm != nil {
-		u.profileForm.SubmitText = "Save Profile"
-		u.profileForm.Refresh()
-	}
-}
-
-func (u *UI) loadProfileForEdit(p models.Profile) {
-	u.profileEditingID = p.ID
-	u.profileDisplayName.SetText(p.DisplayName)
-	u.profileCompanyName.SetText(p.CompanyName)
-	u.profileAddress1.SetText(p.AddressLine1)
-	u.profileAddress2.SetText(p.AddressLine2)
-	u.profileCity.SetText(p.City)
-	u.profilePostalCode.SetText(p.PostalCode)
-	u.profileCountry.SetText(p.Country)
-	u.profileEmail.SetText(p.Email)
-	u.profilePhone.SetText(p.Phone)
-	u.profileTaxID.SetText(p.TaxID)
-	u.profileBankName.SetText(p.PaymentDetails.BankName)
-	u.profileIBAN.SetText(p.PaymentDetails.IBAN)
-	u.profileBIC.SetText(p.PaymentDetails.BIC)
-	u.profilePayment.SetText(p.PaymentDetails.PaymentTerms)
-	if u.profileForm != nil {
-		u.profileForm.SubmitText = "Update Profile"
-		u.profileForm.Refresh()
-	}
+	content := container.NewBorder(actionBar, nil, nil, nil, split)
+	return content
 }
 
 func (u *UI) makeCustomersTab() fyne.CanvasObject {
-	u.customerDisplayName = widget.NewEntry()
-	u.customerContactName = widget.NewEntry()
-	u.customerEmail = widget.NewEntry()
-	u.customerPhone = widget.NewEntry()
-	u.customerAddress1 = widget.NewEntry()
-	u.customerAddress2 = widget.NewEntry()
-	u.customerCity = widget.NewEntry()
-	u.customerPostalCode = widget.NewEntry()
-	u.customerCountry = widget.NewEntry()
-	u.customerNotes = widget.NewMultiLineEntry()
-
-	u.customerForm = widget.NewForm(
-		widget.NewFormItem("Display Name", u.customerDisplayName),
-		widget.NewFormItem("Contact Name", u.customerContactName),
-		widget.NewFormItem("Email", u.customerEmail),
-		widget.NewFormItem("Phone", u.customerPhone),
-		widget.NewFormItem("Address Line 1", u.customerAddress1),
-		widget.NewFormItem("Address Line 2", u.customerAddress2),
-		widget.NewFormItem("City", u.customerCity),
-		widget.NewFormItem("Postal Code", u.customerPostalCode),
-		widget.NewFormItem("Country", u.customerCountry),
-		widget.NewFormItem("Notes", u.customerNotes),
-	)
-	u.customerForm.SubmitText = "Save Customer"
-	u.customerForm.CancelText = "Clear"
-	u.customerForm.OnSubmit = func() {
-		if strings.TrimSpace(u.customerDisplayName.Text) == "" {
-			dialog.ShowError(fmt.Errorf("display name is required"), u.win)
-			return
-		}
-		now := time.Now()
-		customerID := u.customerEditingID
-		if customerID == "" {
-			customerID = id.New()
-		}
-		createdAt := now
-		if u.customerEditingID != "" {
-			if existing, err := u.store.GetCustomer(u.customerEditingID); err == nil {
-				createdAt = existing.CreatedAt
-			}
-		}
-		customer := models.Customer{
-			ID:           customerID,
-			DisplayName:  strings.TrimSpace(u.customerDisplayName.Text),
-			ContactName:  strings.TrimSpace(u.customerContactName.Text),
-			Email:        strings.TrimSpace(u.customerEmail.Text),
-			Phone:        strings.TrimSpace(u.customerPhone.Text),
-			AddressLine1: strings.TrimSpace(u.customerAddress1.Text),
-			AddressLine2: strings.TrimSpace(u.customerAddress2.Text),
-			City:         strings.TrimSpace(u.customerCity.Text),
-			PostalCode:   strings.TrimSpace(u.customerPostalCode.Text),
-			Country:      strings.TrimSpace(u.customerCountry.Text),
-			Notes:        strings.TrimSpace(u.customerNotes.Text),
-			CreatedAt:    createdAt,
-			UpdatedAt:    now,
-		}
-		if err := u.store.SaveCustomer(customer); err != nil {
-			dialog.ShowError(err, u.win)
-			return
-		}
-		if u.customerEditingID != "" {
-			dialog.ShowInformation("Customer updated", fmt.Sprintf("Customer %s updated.", customer.DisplayName), u.win)
-		} else {
-			dialog.ShowInformation("Customer saved", fmt.Sprintf("Customer %s stored.", customer.DisplayName), u.win)
-		}
-		u.resetCustomerForm()
-		u.refreshCustomers()
-	}
-	u.customerForm.OnCancel = func() {
-		u.resetCustomerForm()
-	}
+	u.customerDetailText = widget.NewRichTextFromMarkdown("_Select a customer to view details._")
+	detailCard := widget.NewCard("Customer Details", "", u.customerDetailText)
 
 	u.customerList = widget.NewList(
 		func() int { return len(u.customers) },
@@ -348,138 +153,928 @@ func (u *UI) makeCustomersTab() fyne.CanvasObject {
 				return
 			}
 			c := u.customers[id]
-			obj.(*widget.Label).SetText(fmt.Sprintf("%s (%s) – %s, %s %s", c.DisplayName, c.ContactName, c.AddressLine1, c.PostalCode, c.City))
+			label := fmt.Sprintf("%s – %s", c.DisplayName, strings.TrimSpace(c.ContactName))
+			obj.(*widget.Label).SetText(label)
 		},
 	)
 	u.customerList.OnSelected = func(id widget.ListItemID) {
-		u.selectedCustomer = id
-	}
-
-	editButton := widget.NewButton("Edit Selected", func() {
-		if u.selectedCustomer < 0 || u.selectedCustomer >= len(u.customers) {
-			dialog.ShowInformation("Select customer", "Please choose a customer in the list first.", u.win)
+		if id < 0 || id >= len(u.customers) {
 			return
 		}
-		u.loadCustomerForEdit(u.customers[u.selectedCustomer])
+		u.selectedCustomer = id
+		u.updateCustomerDetail()
+		u.customerEditButton.Enable()
+	}
+
+	newButton := widget.NewButtonWithIcon("New Customer", themePlusIcon(), func() {
+		u.openCustomerDialog(nil)
+	})
+	u.customerEditButton = widget.NewButton("Edit Selected", func() {
+		if u.selectedCustomer < 0 || u.selectedCustomer >= len(u.customers) {
+			return
+		}
+		customer := u.customers[u.selectedCustomer]
+		u.openCustomerDialog(&customer)
+	})
+	u.customerEditButton.Disable()
+
+	actionBar := container.NewHBox(newButton, u.customerEditButton)
+
+	split := container.NewHSplit(
+		container.NewMax(u.customerList),
+		container.NewMax(detailCard),
+	)
+	split.SetOffset(0.34)
+
+	content := container.NewBorder(actionBar, nil, nil, nil, split)
+	return content
+}
+
+func (u *UI) makeInvoicesTab() fyne.CanvasObject {
+	u.invoiceDetailText = widget.NewRichTextFromMarkdown("_Select an invoice to view details._")
+	detailCard := widget.NewCard("Invoice Details", "", u.invoiceDetailText)
+
+	u.invoiceList = widget.NewList(
+		func() int { return len(u.invoiceSummaries) },
+		func() fyne.CanvasObject { return widget.NewLabel("") },
+		func(id widget.ListItemID, obj fyne.CanvasObject) {
+			if id < 0 || id >= len(u.invoiceSummaries) {
+				return
+			}
+			obj.(*widget.Label).SetText(u.invoiceSummaries[id])
+		},
+	)
+	u.invoiceList.OnSelected = func(id widget.ListItemID) {
+		if id < 0 || id >= len(u.invoices) {
+			return
+		}
+		u.selectedInvoice = id
+		u.updateInvoiceDetail()
+		u.invoiceEditButton.Enable()
+	}
+
+	newButton := widget.NewButtonWithIcon("New Invoice", themePlusIcon(), func() {
+		u.openInvoiceDialog(nil)
+	})
+	u.invoiceEditButton = widget.NewButton("Edit Selected", func() {
+		if u.selectedInvoice < 0 || u.selectedInvoice >= len(u.invoices) {
+			return
+		}
+		invoice := u.invoices[u.selectedInvoice]
+		u.openInvoiceDialog(&invoice)
+	})
+	u.invoiceEditButton.Disable()
+
+	actionBar := container.NewHBox(newButton, u.invoiceEditButton)
+
+	split := container.NewHSplit(
+		container.NewMax(u.invoiceList),
+		container.NewMax(detailCard),
+	)
+	split.SetOffset(0.34)
+
+	content := container.NewBorder(actionBar, nil, nil, nil, split)
+	return content
+}
+
+func (u *UI) openProfileDialog(existing *models.Profile) {
+	isEdit := existing != nil
+	title := "New Profile"
+	submitLabel := "Create"
+	var current models.Profile
+	if isEdit {
+		title = "Edit Profile"
+		submitLabel = "Update"
+		current = *existing
+	}
+
+	displayName := widget.NewEntry()
+	displayName.SetPlaceHolder("Required")
+	displayName.Validator = validation.NewRegexp(`\S+`, "Display name is required")
+	companyName := widget.NewEntry()
+	address1 := widget.NewEntry()
+	address2 := widget.NewEntry()
+	city := widget.NewEntry()
+	postalCode := widget.NewEntry()
+	country := widget.NewEntry()
+	email := widget.NewEntry()
+	phone := widget.NewEntry()
+	taxID := widget.NewEntry()
+	bankName := widget.NewEntry()
+	iban := widget.NewEntry()
+	bic := widget.NewEntry()
+	paymentTerms := widget.NewEntry()
+
+	if isEdit {
+		displayName.SetText(current.DisplayName)
+		companyName.SetText(current.CompanyName)
+		address1.SetText(current.AddressLine1)
+		address2.SetText(current.AddressLine2)
+		city.SetText(current.City)
+		postalCode.SetText(current.PostalCode)
+		country.SetText(current.Country)
+		email.SetText(current.Email)
+		phone.SetText(current.Phone)
+		taxID.SetText(current.TaxID)
+		bankName.SetText(current.PaymentDetails.BankName)
+		iban.SetText(current.PaymentDetails.IBAN)
+		bic.SetText(current.PaymentDetails.BIC)
+		paymentTerms.SetText(current.PaymentDetails.PaymentTerms)
+	}
+
+	form := widget.NewForm(
+		widget.NewFormItem("Display Name", displayName),
+		widget.NewFormItem("Company Name", companyName),
+		widget.NewFormItem("Address Line 1", address1),
+		widget.NewFormItem("Address Line 2", address2),
+		widget.NewFormItem("City", city),
+		widget.NewFormItem("Postal Code", postalCode),
+		widget.NewFormItem("Country", country),
+		widget.NewFormItem("Email", email),
+		widget.NewFormItem("Phone", phone),
+		widget.NewFormItem("Tax ID", taxID),
+		widget.NewFormItem("Bank Name", bankName),
+		widget.NewFormItem("IBAN", iban),
+		widget.NewFormItem("BIC", bic),
+		widget.NewFormItem("Payment Terms", paymentTerms),
+	)
+
+	u.showFormDialog(title, submitLabel, form, func() error {
+		if strings.TrimSpace(displayName.Text) == "" {
+			return fmt.Errorf("display name is required")
+		}
+		now := time.Now()
+		profileID := ""
+		createdAt := now
+		if isEdit {
+			profileID = current.ID
+			createdAt = current.CreatedAt
+		} else {
+			profileID = id.New()
+		}
+		profile := models.Profile{
+			ID:           profileID,
+			DisplayName:  strings.TrimSpace(displayName.Text),
+			CompanyName:  strings.TrimSpace(companyName.Text),
+			AddressLine1: strings.TrimSpace(address1.Text),
+			AddressLine2: strings.TrimSpace(address2.Text),
+			City:         strings.TrimSpace(city.Text),
+			PostalCode:   strings.TrimSpace(postalCode.Text),
+			Country:      strings.TrimSpace(country.Text),
+			Email:        strings.TrimSpace(email.Text),
+			Phone:        strings.TrimSpace(phone.Text),
+			TaxID:        strings.TrimSpace(taxID.Text),
+			PaymentDetails: models.PaymentDetails{
+				BankName:     strings.TrimSpace(bankName.Text),
+				IBAN:         strings.TrimSpace(iban.Text),
+				BIC:          strings.TrimSpace(bic.Text),
+				PaymentTerms: strings.TrimSpace(paymentTerms.Text),
+			},
+			CreatedAt: createdAt,
+			UpdatedAt: now,
+		}
+		if err := u.store.SaveProfile(profile); err != nil {
+			return fmt.Errorf("save profile: %w", err)
+		}
+		u.refreshProfiles(profile.ID)
+		u.lastProfileID = profile.ID
+		if isEdit {
+			dialog.ShowInformation("Profile updated", fmt.Sprintf("Profile %s updated.", profile.DisplayName), u.win)
+		} else {
+			dialog.ShowInformation("Profile created", fmt.Sprintf("Profile %s stored.", profile.DisplayName), u.win)
+		}
+		return nil
+	})
+}
+
+func (u *UI) openCustomerDialog(existing *models.Customer) {
+	isEdit := existing != nil
+	title := "New Customer"
+	submitLabel := "Create"
+	var current models.Customer
+	if isEdit {
+		title = "Edit Customer"
+		submitLabel = "Update"
+		current = *existing
+	}
+
+	displayName := widget.NewEntry()
+	displayName.SetPlaceHolder("Required")
+	displayName.Validator = validation.NewRegexp(`\S+`, "Display name is required")
+	contactName := widget.NewEntry()
+	email := widget.NewEntry()
+	phone := widget.NewEntry()
+	address1 := widget.NewEntry()
+	address2 := widget.NewEntry()
+	city := widget.NewEntry()
+	postalCode := widget.NewEntry()
+	country := widget.NewEntry()
+	notes := widget.NewMultiLineEntry()
+
+	if isEdit {
+		displayName.SetText(current.DisplayName)
+		contactName.SetText(current.ContactName)
+		email.SetText(current.Email)
+		phone.SetText(current.Phone)
+		address1.SetText(current.AddressLine1)
+		address2.SetText(current.AddressLine2)
+		city.SetText(current.City)
+		postalCode.SetText(current.PostalCode)
+		country.SetText(current.Country)
+		notes.SetText(current.Notes)
+	}
+
+	form := widget.NewForm(
+		widget.NewFormItem("Display Name", displayName),
+		widget.NewFormItem("Contact Name", contactName),
+		widget.NewFormItem("Email", email),
+		widget.NewFormItem("Phone", phone),
+		widget.NewFormItem("Address Line 1", address1),
+		widget.NewFormItem("Address Line 2", address2),
+		widget.NewFormItem("City", city),
+		widget.NewFormItem("Postal Code", postalCode),
+		widget.NewFormItem("Country", country),
+		widget.NewFormItem("Notes", notes),
+	)
+
+	u.showFormDialog(title, submitLabel, form, func() error {
+		if strings.TrimSpace(displayName.Text) == "" {
+			return fmt.Errorf("display name is required")
+		}
+		now := time.Now()
+		customerID := ""
+		createdAt := now
+		if isEdit {
+			customerID = current.ID
+			createdAt = current.CreatedAt
+		} else {
+			customerID = id.New()
+		}
+		customer := models.Customer{
+			ID:           customerID,
+			DisplayName:  strings.TrimSpace(displayName.Text),
+			ContactName:  strings.TrimSpace(contactName.Text),
+			Email:        strings.TrimSpace(email.Text),
+			Phone:        strings.TrimSpace(phone.Text),
+			AddressLine1: strings.TrimSpace(address1.Text),
+			AddressLine2: strings.TrimSpace(address2.Text),
+			City:         strings.TrimSpace(city.Text),
+			PostalCode:   strings.TrimSpace(postalCode.Text),
+			Country:      strings.TrimSpace(country.Text),
+			Notes:        strings.TrimSpace(notes.Text),
+			CreatedAt:    createdAt,
+			UpdatedAt:    now,
+		}
+		if err := u.store.SaveCustomer(customer); err != nil {
+			return fmt.Errorf("save customer: %w", err)
+		}
+		u.refreshCustomers(customer.ID)
+		u.lastCustomerID = customer.ID
+		if isEdit {
+			dialog.ShowInformation("Customer updated", fmt.Sprintf("Customer %s updated.", customer.DisplayName), u.win)
+		} else {
+			dialog.ShowInformation("Customer created", fmt.Sprintf("Customer %s stored.", customer.DisplayName), u.win)
+		}
+		return nil
+	})
+}
+
+func (u *UI) openInvoiceDialog(existing *models.Invoice) {
+	isEdit := existing != nil
+	title := "New Invoice"
+	submitLabel := "Create"
+	var current models.Invoice
+	if isEdit {
+		title = "Edit Invoice"
+		submitLabel = "Update"
+		current = *existing
+	}
+
+	profileOptions := u.profileOptions()
+	customerOptions := u.customerOptions()
+
+	profileSelect := widget.NewSelect(profileOptions, nil)
+	profileSelect.PlaceHolder = "Select profile"
+	customerSelect := widget.NewSelect(customerOptions, nil)
+	customerSelect.PlaceHolder = "Select customer"
+	issueDate := widget.NewEntry()
+	issueDate.SetPlaceHolder("YYYY-MM-DD")
+	dueDate := widget.NewEntry()
+	dueDate.SetPlaceHolder("YYYY-MM-DD")
+	taxRate := widget.NewEntry()
+	taxRate.SetPlaceHolder("0")
+	notes := widget.NewMultiLineEntry()
+	items := make([]models.InvoiceItem, 0)
+
+	defaultIssue := time.Now()
+	defaultDue := defaultIssue.AddDate(0, 0, 14)
+	if isEdit {
+		if prof, err := u.store.GetProfile(current.ProfileID); err == nil {
+			label := u.profileLabel(prof)
+			if contains(profileOptions, label) {
+				profileSelect.SetSelected(label)
+			}
+		}
+		if cust, err := u.store.GetCustomer(current.CustomerID); err == nil {
+			label := u.customerLabel(cust)
+			if contains(customerOptions, label) {
+				customerSelect.SetSelected(label)
+			}
+		}
+		issueDate.SetText(current.IssueDate.Format("2006-01-02"))
+		dueDate.SetText(current.DueDate.Format("2006-01-02"))
+		taxRate.SetText(fmt.Sprintf("%.2f", current.TaxRatePercent))
+		notes.SetText(current.Notes)
+		items = append(items, current.Items...)
+	} else {
+		issueDate.SetText(defaultIssue.Format("2006-01-02"))
+		dueDate.SetText(defaultDue.Format("2006-01-02"))
+		taxRate.SetText("0")
+		if len(profileOptions) > 0 {
+			profileSelect.SetSelected(profileOptions[0])
+		}
+		if len(customerOptions) > 0 {
+			customerSelect.SetSelected(customerOptions[0])
+		}
+		if u.lastProfileID != "" {
+			if profile, ok := u.profileByID(u.lastProfileID); ok {
+				label := u.profileLabel(profile)
+				if contains(profileOptions, label) {
+					profileSelect.SetSelected(label)
+				}
+			}
+		}
+		if u.lastCustomerID != "" {
+			if customer, ok := u.customerByID(u.lastCustomerID); ok {
+				label := u.customerLabel(customer)
+				if contains(customerOptions, label) {
+					customerSelect.SetSelected(label)
+				}
+			}
+		}
+	}
+
+	makeHeaderLabel := func(text string) *widget.Label {
+		return widget.NewLabelWithStyle(text, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	}
+
+	lineItemsContainer := container.NewVBox()
+	subtotalLabel := widget.NewLabel("Subtotal: 0.00")
+	taxLabel := widget.NewLabel("Tax: 0.00")
+	totalLabel := widget.NewLabel("Total: 0.00")
+
+	updateTotals := func() {
+		subtotal := 0.0
+		for _, item := range items {
+			subtotal += item.LineTotal
+		}
+		taxPercent := 0.0
+		if v := strings.TrimSpace(taxRate.Text); v != "" {
+			if f, err := strconv.ParseFloat(v, 64); err == nil {
+				taxPercent = f
+			}
+		}
+		taxAmount := subtotal * (taxPercent / 100)
+		total := subtotal + taxAmount
+		subtotalLabel.SetText(fmt.Sprintf("Subtotal: %.2f", subtotal))
+		taxLabel.SetText(fmt.Sprintf("Tax: %.2f (%.2f%%)", taxAmount, taxPercent))
+		totalLabel.SetText(fmt.Sprintf("Total: %.2f", total))
+	}
+
+	taxRate.OnChanged = func(string) {
+		updateTotals()
+	}
+
+	renderLineItems := func() {}
+
+	renderLineItems = func() {
+		lineItemsContainer.Objects = nil
+		if len(items) == 0 {
+			lineItemsContainer.Add(widget.NewLabel("No line items yet. Use 'Add Line Item' to start."))
+			updateTotals()
+			lineItemsContainer.Refresh()
+			return
+		}
+		for i := range items {
+			idx := i
+			item := items[idx]
+
+			descEntry := widget.NewEntry()
+			descEntry.SetText(item.Description)
+			descEntry.OnChanged = func(val string) {
+				items[idx].Description = val
+			}
+
+			qtyEntry := widget.NewEntry()
+			qtyEntry.SetText(fmt.Sprintf("%.2f", item.Quantity))
+
+			priceEntry := widget.NewEntry()
+			priceEntry.SetText(fmt.Sprintf("%.2f", item.UnitPrice))
+
+			totalValue := widget.NewLabel(fmt.Sprintf("%.2f", item.LineTotal))
+
+			recalculate := func() {
+				qtyVal, err := strconv.ParseFloat(strings.TrimSpace(qtyEntry.Text), 64)
+				if err != nil {
+					qtyVal = 0
+				}
+				priceVal, err := strconv.ParseFloat(strings.TrimSpace(priceEntry.Text), 64)
+				if err != nil {
+					priceVal = 0
+				}
+				items[idx].Quantity = qtyVal
+				items[idx].UnitPrice = priceVal
+				items[idx].LineTotal = qtyVal * priceVal
+				totalValue.SetText(fmt.Sprintf("%.2f", items[idx].LineTotal))
+				updateTotals()
+			}
+			qtyEntry.OnChanged = func(string) { recalculate() }
+			priceEntry.OnChanged = func(string) { recalculate() }
+
+			removeButton := widget.NewButtonWithIcon("", theme.ContentRemoveIcon(), func() {
+				items = append(items[:idx], items[idx+1:]...)
+				renderLineItems()
+				updateTotals()
+			})
+
+			row := container.NewGridWithColumns(5,
+				descEntry,
+				qtyEntry,
+				priceEntry,
+				totalValue,
+				removeButton,
+			)
+			lineItemsContainer.Add(row)
+		}
+		updateTotals()
+		lineItemsContainer.Refresh()
+	}
+
+	addRow := func(initial models.InvoiceItem) {
+		items = append(items, initial)
+		renderLineItems()
+	}
+
+	addItemButton := widget.NewButtonWithIcon("Add Line Item", theme.ContentAddIcon(), func() {
+		addRow(models.InvoiceItem{Description: "", Quantity: 1, UnitPrice: 0, LineTotal: 0})
 	})
 
-	actionBar := container.NewHBox(editButton)
+	headerRow := container.NewGridWithColumns(5,
+		makeHeaderLabel("Description"),
+		makeHeaderLabel("Qty"),
+		makeHeaderLabel("Unit"),
+		makeHeaderLabel("Line Total"),
+		widget.NewLabel(""),
+	)
 
-	return container.NewBorder(u.customerForm, actionBar, nil, nil, container.NewVScroll(u.customerList))
-}
+	header := container.NewBorder(nil, nil, nil, addItemButton, headerRow)
+	itemsScroll := container.NewVScroll(lineItemsContainer)
+	itemsScroll.SetMinSize(fyne.NewSize(0, 200))
 
-func (u *UI) resetCustomerForm() {
-	u.customerEditingID = ""
-	u.customerDisplayName.SetText("")
-	u.customerContactName.SetText("")
-	u.customerEmail.SetText("")
-	u.customerPhone.SetText("")
-	u.customerAddress1.SetText("")
-	u.customerAddress2.SetText("")
-	u.customerCity.SetText("")
-	u.customerPostalCode.SetText("")
-	u.customerCountry.SetText("")
-	u.customerNotes.SetText("")
-	if u.customerForm != nil {
-		u.customerForm.SubmitText = "Save Customer"
-		u.customerForm.Refresh()
+	summaryCard := widget.NewCard("Invoice Summary", "", container.NewVBox(subtotalLabel, taxLabel, totalLabel))
+
+	if len(items) == 0 && !isEdit {
+		addRow(models.InvoiceItem{Description: "", Quantity: 1, UnitPrice: 0, LineTotal: 0})
+	} else {
+		renderLineItems()
 	}
-}
 
-func (u *UI) loadCustomerForEdit(c models.Customer) {
-	u.customerEditingID = c.ID
-	u.customerDisplayName.SetText(c.DisplayName)
-	u.customerContactName.SetText(c.ContactName)
-	u.customerEmail.SetText(c.Email)
-	u.customerPhone.SetText(c.Phone)
-	u.customerAddress1.SetText(c.AddressLine1)
-	u.customerAddress2.SetText(c.AddressLine2)
-	u.customerCity.SetText(c.City)
-	u.customerPostalCode.SetText(c.PostalCode)
-	u.customerCountry.SetText(c.Country)
-	u.customerNotes.SetText(c.Notes)
-	if u.customerForm != nil {
-		u.customerForm.SubmitText = "Update Customer"
-		u.customerForm.Refresh()
+	form := widget.NewForm(
+		widget.NewFormItem("Profile", profileSelect),
+		widget.NewFormItem("Customer", customerSelect),
+		widget.NewFormItem("Issue Date (YYYY-MM-DD)", issueDate),
+		widget.NewFormItem("Due Date (YYYY-MM-DD)", dueDate),
+		widget.NewFormItem("Tax Rate (%)", taxRate),
+		widget.NewFormItem("Notes", notes),
+	)
+
+	lineItemsSection := container.NewVBox(
+		header,
+		itemsScroll,
+		widget.NewSeparator(),
+		summaryCard,
+	)
+
+	content := container.NewBorder(form, nil, nil, nil, lineItemsSection)
+	content = container.NewVBox(form, widget.NewSeparator(), lineItemsSection)
+
+	var dlg *dialog.CustomDialog
+	save := widget.NewButton(submitLabel, nil)
+	cancel := widget.NewButton("Cancel", nil)
+	status := widget.NewLabel("")
+	status.Wrapping = fyne.TextWrapWord
+	status.Hide()
+
+	buttons := container.NewHBox(layout.NewSpacer(), cancel, save)
+	dialogContent := container.NewBorder(content, container.NewVBox(status, buttons), nil, nil, nil)
+
+	dlg = dialog.NewCustomWithoutButtons(title, dialogContent, u.win)
+
+	cancel.OnTapped = func() {
+		dlg.Hide()
 	}
+
+	save.OnTapped = func() {
+		if len(profileOptions) == 0 || len(customerOptions) == 0 {
+			status.SetText("Please create at least one profile and one customer first.")
+			status.Show()
+			return
+		}
+		profileLabel := profileSelect.Selected
+		customerLabel := customerSelect.Selected
+		if profileLabel == "" || customerLabel == "" {
+			status.SetText("Profile and customer selection are required.")
+			status.Show()
+			return
+		}
+		profileModel, ok := u.profileByLabel(profileLabel)
+		if !ok {
+			status.SetText("Selected profile could not be found.")
+			status.Show()
+			return
+		}
+		customerModel, ok := u.customerByLabel(customerLabel)
+		if !ok {
+			status.SetText("Selected customer could not be found.")
+			status.Show()
+			return
+		}
+		if len(items) == 0 {
+			status.SetText("Add at least one line item.")
+			status.Show()
+			return
+		}
+		issue, err := time.Parse("2006-01-02", strings.TrimSpace(issueDate.Text))
+		if err != nil {
+			status.SetText("Invalid issue date. Use YYYY-MM-DD.")
+			status.Show()
+			return
+		}
+		due, err := time.Parse("2006-01-02", strings.TrimSpace(dueDate.Text))
+		if err != nil {
+			status.SetText("Invalid due date. Use YYYY-MM-DD.")
+			status.Show()
+			return
+		}
+		taxPercent := 0.0
+		if strings.TrimSpace(taxRate.Text) != "" {
+			taxPercent, err = strconv.ParseFloat(strings.TrimSpace(taxRate.Text), 64)
+			if err != nil {
+				status.SetText("Tax rate must be a number.")
+				status.Show()
+				return
+			}
+		}
+
+		subtotal := 0.0
+		for _, item := range items {
+			subtotal += item.LineTotal
+		}
+		taxAmount := subtotal * (taxPercent / 100)
+		total := subtotal + taxAmount
+		now := time.Now()
+
+		invoiceID := ""
+		invoiceNumber := ""
+		pdfPath := ""
+		createdAt := now
+		if isEdit {
+			invoiceID = current.ID
+			invoiceNumber = current.Number
+			pdfPath = current.PDFPath
+			createdAt = current.CreatedAt
+		} else {
+			invoiceID = id.New()
+		}
+		if invoiceNumber == "" {
+			invoiceNumber = fmt.Sprintf("INV-%s-%s", issue.Format("20060102"), id.Short())
+		}
+		if pdfPath == "" {
+			pdfPath = filepath.Join(u.store.BaseDir(), "pdf", fmt.Sprintf("%s.pdf", strings.ToLower(invoiceNumber)))
+		}
+
+		invoice := models.Invoice{
+			ID:             invoiceID,
+			Number:         invoiceNumber,
+			ProfileID:      profileModel.ID,
+			CustomerID:     customerModel.ID,
+			IssueDate:      issue,
+			DueDate:        due,
+			Items:          append([]models.InvoiceItem(nil), items...),
+			Notes:          strings.TrimSpace(notes.Text),
+			TaxRatePercent: taxPercent,
+			Subtotal:       subtotal,
+			TaxAmount:      taxAmount,
+			Total:          total,
+			PDFPath:        pdfPath,
+			CreatedAt:      createdAt,
+			UpdatedAt:      now,
+		}
+
+		if err := u.store.SaveInvoice(invoice); err != nil {
+			status.SetText(fmt.Sprintf("Save failed: %v", err))
+			status.Show()
+			return
+		}
+		if err := pdf.CreateInvoicePDF(pdfPath, profileModel, customerModel, invoice); err != nil {
+			status.SetText(fmt.Sprintf("PDF generation failed: %v", err))
+			status.Show()
+			return
+		}
+
+		u.lastProfileID = invoice.ProfileID
+		u.lastCustomerID = invoice.CustomerID
+		u.refreshInvoices(invoice.ID)
+		if isEdit {
+			dialog.ShowInformation("Invoice updated", fmt.Sprintf("Invoice %s regenerated. PDF stored at %s.", invoice.Number, pdfPath), u.win)
+		} else {
+			dialog.ShowInformation("Invoice created", fmt.Sprintf("Invoice %s generated. PDF stored at %s.", invoice.Number, pdfPath), u.win)
+		}
+		dlg.Hide()
+	}
+
+	dlg.Resize(fyne.NewSize(560, 640))
+	dlg.Show()
 }
 
-func (u *UI) refreshProfiles() {
+func (u *UI) showFormDialog(title, submitLabel string, form *widget.Form, submit func() error) {
+	status := widget.NewLabel("")
+	status.Wrapping = fyne.TextWrapWord
+	status.Hide()
+
+	var dlg *dialog.CustomDialog
+	save := widget.NewButton(submitLabel, nil)
+	cancel := widget.NewButton("Cancel", nil)
+	buttons := container.NewHBox(layout.NewSpacer(), cancel, save)
+	content := container.NewVBox(form, status, buttons)
+
+	dlg = dialog.NewCustomWithoutButtons(title, content, u.win)
+
+	cancel.OnTapped = func() {
+		dlg.Hide()
+	}
+	save.OnTapped = func() {
+		if err := submit(); err != nil {
+			status.SetText(err.Error())
+			status.Show()
+			return
+		}
+		status.Hide()
+		dlg.Hide()
+	}
+
+	dlg.Resize(fyne.NewSize(520, form.MinSize().Height+120))
+	dlg.Show()
+}
+
+func (u *UI) refreshProfiles(selectedIDs ...string) {
 	profiles, err := u.store.ListProfiles()
 	if err != nil {
 		dialog.ShowError(fmt.Errorf("load profiles: %w", err), u.win)
 		return
 	}
+	targetID := ""
+	if len(selectedIDs) > 0 {
+		targetID = selectedIDs[0]
+	} else if u.selectedProfile >= 0 && u.selectedProfile < len(u.profiles) {
+		targetID = u.profiles[u.selectedProfile].ID
+	}
+
 	u.profiles = profiles
+	u.selectedProfile = -1
+
 	if u.profileList != nil {
 		u.profileList.Refresh()
 	}
-	u.selectedProfile = -1
-	if u.invoiceProfileSelect != nil {
-		labels := make([]string, len(profiles))
-		for i, p := range profiles {
-			labels[i] = u.profileLabel(p)
+
+	if targetID != "" {
+		for idx, profile := range profiles {
+			if profile.ID == targetID {
+				u.selectedProfile = idx
+				break
+			}
 		}
-		u.invoiceProfileSelect.Options = labels
-		if len(labels) > 0 && u.invoiceProfileSelect.Selected == "" {
-			u.invoiceProfileSelect.SetSelected(labels[0])
+	}
+
+	if u.profileEditButton != nil {
+		if u.selectedProfile >= 0 {
+			u.profileEditButton.Enable()
 		} else {
-			u.invoiceProfileSelect.Refresh()
+			u.profileEditButton.Disable()
 		}
+	}
+
+	if u.selectedProfile >= 0 && u.profileList != nil && u.selectedProfile < len(u.profiles) {
+		u.profileList.Select(u.selectedProfile)
+	} else {
+		u.updateProfileDetail()
 	}
 }
 
-func (u *UI) refreshCustomers() {
+func (u *UI) refreshCustomers(selectedIDs ...string) {
 	customers, err := u.store.ListCustomers()
 	if err != nil {
 		dialog.ShowError(fmt.Errorf("load customers: %w", err), u.win)
 		return
 	}
+	targetID := ""
+	if len(selectedIDs) > 0 {
+		targetID = selectedIDs[0]
+	} else if u.selectedCustomer >= 0 && u.selectedCustomer < len(u.customers) {
+		targetID = u.customers[u.selectedCustomer].ID
+	}
+
 	u.customers = customers
+	u.selectedCustomer = -1
+
 	if u.customerList != nil {
 		u.customerList.Refresh()
 	}
-	u.selectedCustomer = -1
-	if u.invoiceCustomerSelect != nil {
-		labels := make([]string, len(customers))
-		for i, c := range customers {
-			labels[i] = u.customerLabel(c)
+
+	if targetID != "" {
+		for idx, customer := range customers {
+			if customer.ID == targetID {
+				u.selectedCustomer = idx
+				break
+			}
 		}
-		u.invoiceCustomerSelect.Options = labels
-		if len(labels) > 0 && u.invoiceCustomerSelect.Selected == "" {
-			u.invoiceCustomerSelect.SetSelected(labels[0])
+	}
+
+	if u.customerEditButton != nil {
+		if u.selectedCustomer >= 0 {
+			u.customerEditButton.Enable()
 		} else {
-			u.invoiceCustomerSelect.Refresh()
+			u.customerEditButton.Disable()
 		}
+	}
+
+	if u.selectedCustomer >= 0 && u.customerList != nil && u.selectedCustomer < len(u.customers) {
+		u.customerList.Select(u.selectedCustomer)
+	} else {
+		u.updateCustomerDetail()
 	}
 }
 
-func (u *UI) refreshInvoices() {
+func (u *UI) refreshInvoices(selectedIDs ...string) {
 	invoices, err := u.store.ListInvoices()
 	if err != nil {
 		dialog.ShowError(fmt.Errorf("load invoices: %w", err), u.win)
 		return
 	}
+	targetID := ""
+	if len(selectedIDs) > 0 {
+		targetID = selectedIDs[0]
+	} else if u.selectedInvoice >= 0 && u.selectedInvoice < len(u.invoices) {
+		targetID = u.invoices[u.selectedInvoice].ID
+	}
+
 	u.invoices = invoices
 	u.invoiceSummaries = make([]string, len(invoices))
-	for i, inv := range invoices {
-		customerName := inv.CustomerID
+	for idx, inv := range invoices {
+		customerLabel := inv.CustomerID
 		if cust, err := u.store.GetCustomer(inv.CustomerID); err == nil {
-			customerName = cust.DisplayName
+			customerLabel = cust.DisplayName
 		}
-		u.invoiceSummaries[i] = fmt.Sprintf("%s – %s – Total %.2f", inv.Number, customerName, inv.Total)
+		status := invoiceBadge(inv)
+		u.invoiceSummaries[idx] = fmt.Sprintf("%s | %s – %s – Total %.2f", status, inv.Number, customerLabel, inv.Total)
 	}
+
+	u.selectedInvoice = -1
+
 	if u.invoiceList != nil {
 		u.invoiceList.Refresh()
 	}
-	u.selectedInvoice = -1
-	if u.invoiceDetails != nil {
-		if len(invoices) == 0 {
-			u.invoiceDetails.SetText("No invoices stored yet.")
-		} else {
-			u.invoiceDetails.SetText("Select an invoice to see details.")
+
+	if targetID != "" {
+		for idx, invoice := range invoices {
+			if invoice.ID == targetID {
+				u.selectedInvoice = idx
+				break
+			}
 		}
 	}
+
+	if u.invoiceEditButton != nil {
+		if u.selectedInvoice >= 0 {
+			u.invoiceEditButton.Enable()
+		} else {
+			u.invoiceEditButton.Disable()
+		}
+	}
+
+	if u.selectedInvoice >= 0 && u.invoiceList != nil && u.selectedInvoice < len(u.invoices) {
+		u.invoiceList.Select(u.selectedInvoice)
+	} else {
+		u.updateInvoiceDetail()
+	}
+}
+
+func (u *UI) updateProfileDetail() {
+	if u.profileDetailText == nil {
+		return
+	}
+	if u.selectedProfile < 0 || u.selectedProfile >= len(u.profiles) {
+		u.profileDetailText.ParseMarkdown("_Select a profile to view details._")
+		return
+	}
+	p := u.profiles[u.selectedProfile]
+	lines := []string{
+		fmt.Sprintf("**Display Name:** %s", p.DisplayName),
+		fmt.Sprintf("**Company:** %s", p.CompanyName),
+		fmt.Sprintf("**Email:** %s", p.Email),
+		fmt.Sprintf("**Phone:** %s", p.Phone),
+		fmt.Sprintf("**Tax ID:** %s", p.TaxID),
+		"",
+		"**Address**",
+		strings.TrimSpace(p.AddressLine1),
+		strings.TrimSpace(p.AddressLine2),
+		fmt.Sprintf("%s %s", strings.TrimSpace(p.PostalCode), strings.TrimSpace(p.City)),
+		strings.TrimSpace(p.Country),
+		"",
+		"**Payment Details**",
+		fmt.Sprintf("Bank: %s", p.PaymentDetails.BankName),
+		fmt.Sprintf("IBAN: %s", p.PaymentDetails.IBAN),
+		fmt.Sprintf("BIC: %s", p.PaymentDetails.BIC),
+		fmt.Sprintf("Terms: %s", p.PaymentDetails.PaymentTerms),
+	}
+	u.profileDetailText.ParseMarkdown(strings.Join(lines, "\n"))
+}
+
+func (u *UI) updateCustomerDetail() {
+	if u.customerDetailText == nil {
+		return
+	}
+	if u.selectedCustomer < 0 || u.selectedCustomer >= len(u.customers) {
+		u.customerDetailText.ParseMarkdown("_Select a customer to view details._")
+		return
+	}
+	c := u.customers[u.selectedCustomer]
+	lines := []string{
+		fmt.Sprintf("**Display Name:** %s", c.DisplayName),
+		fmt.Sprintf("**Contact:** %s", c.ContactName),
+		fmt.Sprintf("**Email:** %s", c.Email),
+		fmt.Sprintf("**Phone:** %s", c.Phone),
+		"",
+		"**Address**",
+		strings.TrimSpace(c.AddressLine1),
+		strings.TrimSpace(c.AddressLine2),
+		fmt.Sprintf("%s %s", strings.TrimSpace(c.PostalCode), strings.TrimSpace(c.City)),
+		strings.TrimSpace(c.Country),
+	}
+	if strings.TrimSpace(c.Notes) != "" {
+		lines = append(lines, "", "**Notes**", c.Notes)
+	}
+	u.customerDetailText.ParseMarkdown(strings.Join(lines, "\n"))
+}
+
+func (u *UI) updateInvoiceDetail() {
+	if u.invoiceDetailText == nil {
+		return
+	}
+	if u.selectedInvoice < 0 || u.selectedInvoice >= len(u.invoices) {
+		u.invoiceDetailText.ParseMarkdown("_Select an invoice to view details._")
+		return
+	}
+	inv := u.invoices[u.selectedInvoice]
+	customerName := inv.CustomerID
+	if cust, err := u.store.GetCustomer(inv.CustomerID); err == nil {
+		customerName = cust.DisplayName
+	}
+	profileName := inv.ProfileID
+	if prof, err := u.store.GetProfile(inv.ProfileID); err == nil {
+		profileName = prof.DisplayName
+	}
+	status := invoiceBadge(inv)
+	now := time.Now()
+	daysUntilDue := int(inv.DueDate.Sub(now).Hours() / 24)
+	dueDescriptor := ""
+	if daysUntilDue < 0 {
+		dueDescriptor = fmt.Sprintf("Overdue by %d days", -daysUntilDue)
+	} else {
+		dueDescriptor = fmt.Sprintf("Due in %d days", daysUntilDue)
+	}
+
+	lines := []string{
+		fmt.Sprintf("**Invoice:** %s", inv.Number),
+		fmt.Sprintf("**Status:** %s (%s)", status, dueDescriptor),
+		fmt.Sprintf("**Profile:** %s", profileName),
+		fmt.Sprintf("**Customer:** %s", customerName),
+		fmt.Sprintf("**Issued:** %s", inv.IssueDate.Format("2006-01-02")),
+		fmt.Sprintf("**Due:** %s", inv.DueDate.Format("2006-01-02")),
+		fmt.Sprintf("**Subtotal:** %.2f", inv.Subtotal),
+		fmt.Sprintf("**Tax:** %.2f (%.2f%%)", inv.TaxAmount, inv.TaxRatePercent),
+		fmt.Sprintf("**Total:** %.2f", inv.Total),
+		fmt.Sprintf("**PDF:** %s", inv.PDFPath),
+		"",
+		"**Line Items**",
+	}
+	for _, item := range inv.Items {
+		lines = append(lines, fmt.Sprintf("- %s: %.2f × %.2f = %.2f", item.Description, item.Quantity, item.UnitPrice, item.LineTotal))
+	}
+	if strings.TrimSpace(inv.Notes) != "" {
+		lines = append(lines, "", "**Notes**", inv.Notes)
+	}
+	u.invoiceDetailText.ParseMarkdown(strings.Join(lines, "\n"))
 }
 
 func (u *UI) profileLabel(p models.Profile) string {
@@ -495,374 +1090,77 @@ func (u *UI) customerLabel(c models.Customer) string {
 }
 
 func (u *UI) profileByLabel(label string) (models.Profile, bool) {
-	for _, p := range u.profiles {
-		if u.profileLabel(p) == label {
-			return p, true
+	for _, profile := range u.profiles {
+		if u.profileLabel(profile) == label {
+			return profile, true
 		}
 	}
 	return models.Profile{}, false
 }
 
 func (u *UI) customerByLabel(label string) (models.Customer, bool) {
-	for _, c := range u.customers {
-		if u.customerLabel(c) == label {
-			return c, true
+	for _, customer := range u.customers {
+		if u.customerLabel(customer) == label {
+			return customer, true
 		}
 	}
 	return models.Customer{}, false
 }
-func (u *UI) makeInvoicesTab() fyne.CanvasObject {
-	u.invoiceProfileSelect = widget.NewSelect([]string{}, nil)
-	u.invoiceCustomerSelect = widget.NewSelect([]string{}, nil)
-	u.invoiceIssueDate = widget.NewEntry()
-	u.invoiceIssueDate.SetText(time.Now().Format("2006-01-02"))
-	u.invoiceDueDate = widget.NewEntry()
-	u.invoiceDueDate.SetText(time.Now().AddDate(0, 0, 14).Format("2006-01-02"))
-	u.invoiceTaxRate = widget.NewEntry()
-	u.invoiceTaxRate.SetText("0")
-	u.invoiceNotes = widget.NewMultiLineEntry()
-	u.invoiceItems = make([]models.InvoiceItem, 0, 4)
 
-	u.invoiceItemsList = widget.NewList(
-		func() int { return len(u.invoiceItems) },
-		func() fyne.CanvasObject { return widget.NewLabel("") },
-		func(id widget.ListItemID, obj fyne.CanvasObject) {
-			if id < 0 || id >= len(u.invoiceItems) {
-				return
-			}
-			item := u.invoiceItems[id]
-			obj.(*widget.Label).SetText(fmt.Sprintf("%s – Qty %.2f @ %.2f => %.2f", item.Description, item.Quantity, item.UnitPrice, item.LineTotal))
-		},
-	)
-
-	u.invoiceTotalsLabel = widget.NewLabel("Subtotal: 0.00 | Tax: 0.00 | Total: 0.00")
-	u.invoiceTotalsLabel.Wrapping = fyne.TextWrapWord
-
-	addItem := widget.NewButton("Add Item", func() {
-		descEntry := widget.NewEntry()
-		qtyEntry := widget.NewEntry()
-		qtyEntry.SetText("1")
-		priceEntry := widget.NewEntry()
-		priceEntry.SetText("0")
-		d := dialog.NewForm("Add Line Item", "Add", "Cancel", []*widget.FormItem{
-			widget.NewFormItem("Description", descEntry),
-			widget.NewFormItem("Quantity", qtyEntry),
-			widget.NewFormItem("Unit Price", priceEntry),
-		}, func(confirm bool) {
-			if !confirm {
-				return
-			}
-			desc := strings.TrimSpace(descEntry.Text)
-			if desc == "" {
-				dialog.ShowError(fmt.Errorf("description is required"), u.win)
-				return
-			}
-			qty, err := strconv.ParseFloat(strings.TrimSpace(qtyEntry.Text), 64)
-			if err != nil {
-				dialog.ShowError(fmt.Errorf("invalid quantity: %w", err), u.win)
-				return
-			}
-			price, err := strconv.ParseFloat(strings.TrimSpace(priceEntry.Text), 64)
-			if err != nil {
-				dialog.ShowError(fmt.Errorf("invalid unit price: %w", err), u.win)
-				return
-			}
-			lineTotal := qty * price
-			u.invoiceItems = append(u.invoiceItems, models.InvoiceItem{
-				Description: desc,
-				Quantity:    qty,
-				UnitPrice:   price,
-				LineTotal:   lineTotal,
-			})
-			u.invoiceItemsList.Refresh()
-			u.updateInvoiceTotals()
-		}, u.win)
-		d.Resize(fyne.NewSize(400, 200))
-		d.Show()
-	})
-
-	removeItem := widget.NewButton("Remove Last Item", func() {
-		if len(u.invoiceItems) == 0 {
-			return
-		}
-		u.invoiceItems = u.invoiceItems[:len(u.invoiceItems)-1]
-		u.invoiceItemsList.Refresh()
-		u.updateInvoiceTotals()
-	})
-
-	u.invoiceTaxRate.OnChanged = func(string) {
-		u.updateInvoiceTotals()
+func (u *UI) profileOptions() []string {
+	options := make([]string, len(u.profiles))
+	for idx, profile := range u.profiles {
+		options[idx] = u.profileLabel(profile)
 	}
-
-	u.invoiceDetails = widget.NewLabel("Select an invoice to see details.")
-	u.invoiceDetails.Wrapping = fyne.TextWrapWord
-
-	u.invoiceList = widget.NewList(
-		func() int { return len(u.invoices) },
-		func() fyne.CanvasObject { return widget.NewLabel("") },
-		func(id widget.ListItemID, obj fyne.CanvasObject) {
-			if id < 0 || id >= len(u.invoiceSummaries) {
-				return
-			}
-			obj.(*widget.Label).SetText(u.invoiceSummaries[id])
-		},
-	)
-
-	u.invoiceList.OnSelected = func(id widget.ListItemID) {
-		u.selectedInvoice = id
-		if id < 0 || id >= len(u.invoices) {
-			return
-		}
-		inv := u.invoices[id]
-		customerName := inv.CustomerID
-		if cust, err := u.store.GetCustomer(inv.CustomerID); err == nil {
-			customerName = cust.DisplayName
-		}
-		profileName := inv.ProfileID
-		if prof, err := u.store.GetProfile(inv.ProfileID); err == nil {
-			profileName = prof.DisplayName
-		}
-		u.invoiceDetails.SetText(fmt.Sprintf("Invoice %s\nIssued: %s\nDue: %s\nProfile: %s\nCustomer: %s\nItems: %d\nSubtotal: %.2f\nTax: %.2f\nTotal: %.2f\nPDF: %s",
-			inv.Number,
-			inv.IssueDate.Format("2006-01-02"),
-			inv.DueDate.Format("2006-01-02"),
-			profileName,
-			customerName,
-			len(inv.Items),
-			inv.Subtotal,
-			inv.TaxAmount,
-			inv.Total,
-			inv.PDFPath,
-		))
-	}
-
-	u.invoiceForm = widget.NewForm(
-		widget.NewFormItem("Profile", u.invoiceProfileSelect),
-		widget.NewFormItem("Customer", u.invoiceCustomerSelect),
-		widget.NewFormItem("Issue Date (YYYY-MM-DD)", u.invoiceIssueDate),
-		widget.NewFormItem("Due Date (YYYY-MM-DD)", u.invoiceDueDate),
-		widget.NewFormItem("Tax Rate (%)", u.invoiceTaxRate),
-		widget.NewFormItem("Notes", u.invoiceNotes),
-	)
-	u.invoiceForm.SubmitText = "Create Invoice"
-	u.invoiceForm.CancelText = "Clear"
-	u.invoiceForm.OnSubmit = func() {
-		profileLabel := u.invoiceProfileSelect.Selected
-		customerLabel := u.invoiceCustomerSelect.Selected
-		if profileLabel == "" || customerLabel == "" {
-			dialog.ShowError(fmt.Errorf("profile and customer must be selected"), u.win)
-			return
-		}
-		if len(u.invoiceItems) == 0 {
-			dialog.ShowError(fmt.Errorf("add at least one line item"), u.win)
-			return
-		}
-		profile, ok := u.profileByLabel(profileLabel)
-		if !ok {
-			dialog.ShowError(fmt.Errorf("selected profile unavailable"), u.win)
-			return
-		}
-		customer, ok := u.customerByLabel(customerLabel)
-		if !ok {
-			dialog.ShowError(fmt.Errorf("selected customer unavailable"), u.win)
-			return
-		}
-		issue, err := time.Parse("2006-01-02", strings.TrimSpace(u.invoiceIssueDate.Text))
-		if err != nil {
-			dialog.ShowError(fmt.Errorf("invalid issue date: %w", err), u.win)
-			return
-		}
-		due, err := time.Parse("2006-01-02", strings.TrimSpace(u.invoiceDueDate.Text))
-		if err != nil {
-			dialog.ShowError(fmt.Errorf("invalid due date: %w", err), u.win)
-			return
-		}
-		taxPercent := 0.0
-		if strings.TrimSpace(u.invoiceTaxRate.Text) != "" {
-			taxPercent, err = strconv.ParseFloat(strings.TrimSpace(u.invoiceTaxRate.Text), 64)
-			if err != nil {
-				dialog.ShowError(fmt.Errorf("invalid tax rate: %w", err), u.win)
-				return
-			}
-		}
-
-		subtotal := 0.0
-		for _, item := range u.invoiceItems {
-			subtotal += item.LineTotal
-		}
-		taxAmount := subtotal * (taxPercent / 100)
-		total := subtotal + taxAmount
-		now := time.Now()
-
-		invoiceID := u.invoiceEditingID
-		if invoiceID == "" {
-			invoiceID = id.New()
-		}
-		invoiceNumber := ""
-		pdfPath := ""
-		createdAt := now
-		if u.invoiceEditingID != "" {
-			if existing, err := u.store.GetInvoice(u.invoiceEditingID); err == nil {
-				invoiceNumber = existing.Number
-				pdfPath = existing.PDFPath
-				createdAt = existing.CreatedAt
-			}
-		}
-		if invoiceNumber == "" {
-			invoiceNumber = fmt.Sprintf("INV-%s-%s", issue.Format("20060102"), id.Short())
-		}
-		if pdfPath == "" {
-			pdfPath = filepath.Join(u.store.BaseDir(), "pdf", fmt.Sprintf("%s.pdf", strings.ToLower(invoiceNumber)))
-		}
-
-		invoice := models.Invoice{
-			ID:             invoiceID,
-			Number:         invoiceNumber,
-			ProfileID:      profile.ID,
-			CustomerID:     customer.ID,
-			IssueDate:      issue,
-			DueDate:        due,
-			Items:          append([]models.InvoiceItem(nil), u.invoiceItems...),
-			Notes:          strings.TrimSpace(u.invoiceNotes.Text),
-			TaxRatePercent: taxPercent,
-			Subtotal:       subtotal,
-			TaxAmount:      taxAmount,
-			Total:          total,
-			PDFPath:        pdfPath,
-			CreatedAt:      createdAt,
-			UpdatedAt:      now,
-		}
-
-		if err := u.store.SaveInvoice(invoice); err != nil {
-			dialog.ShowError(err, u.win)
-			return
-		}
-		if err := pdf.CreateInvoicePDF(pdfPath, profile, customer, invoice); err != nil {
-			dialog.ShowError(fmt.Errorf("failed to create PDF: %w", err), u.win)
-			return
-		}
-
-		if u.invoiceEditingID != "" {
-			dialog.ShowInformation("Invoice updated", fmt.Sprintf("Invoice %s regenerated.\nPDF stored at %s", invoice.Number, pdfPath), u.win)
-		} else {
-			dialog.ShowInformation("Invoice created", fmt.Sprintf("Invoice %s generated.\nPDF stored at %s", invoice.Number, pdfPath), u.win)
-		}
-
-		u.resetInvoiceForm()
-		u.refreshInvoices()
-	}
-	u.invoiceForm.OnCancel = func() {
-		u.resetInvoiceForm()
-	}
-
-	itemsControls := container.NewVBox(
-		container.NewGridWithColumns(2, addItem, removeItem),
-		container.NewVScroll(u.invoiceItemsList),
-		u.invoiceTotalsLabel,
-	)
-	left := container.NewVBox(
-		u.invoiceForm,
-		widget.NewSeparator(),
-		itemsControls,
-	)
-
-	editButton := widget.NewButton("Edit Selected", func() {
-		if u.selectedInvoice < 0 || u.selectedInvoice >= len(u.invoices) {
-			dialog.ShowInformation("Select invoice", "Please choose an invoice from the list first.", u.win)
-			return
-		}
-		u.loadInvoiceForEdit(u.invoices[u.selectedInvoice])
-	})
-
-	invoiceListPanel := container.NewBorder(nil, editButton, nil, nil, container.NewVScroll(u.invoiceList))
-	right := container.NewBorder(invoiceListPanel, nil, nil, nil, container.NewVScroll(u.invoiceDetails))
-
-	split := container.NewHSplit(left, right)
-	split.SetOffset(0.52)
-	return split
+	return options
 }
 
-func (u *UI) updateInvoiceTotals() {
-	subtotal := 0.0
-	for _, item := range u.invoiceItems {
-		subtotal += item.LineTotal
+func (u *UI) customerOptions() []string {
+	options := make([]string, len(u.customers))
+	for idx, customer := range u.customers {
+		options[idx] = u.customerLabel(customer)
 	}
-	taxVal := 0.0
-	if u.invoiceTaxRate != nil {
-		if v := strings.TrimSpace(u.invoiceTaxRate.Text); v != "" {
-			if f, err := strconv.ParseFloat(v, 64); err == nil {
-				taxVal = subtotal * (f / 100)
-			}
-		}
-	}
-	total := subtotal + taxVal
-	if u.invoiceTotalsLabel != nil {
-		u.invoiceTotalsLabel.SetText(fmt.Sprintf("Subtotal: %.2f | Tax: %.2f | Total: %.2f", subtotal, taxVal, total))
-	}
+	return options
 }
 
-func (u *UI) resetInvoiceForm() {
-	u.invoiceEditingID = ""
-	u.invoiceIssueDate.SetText(time.Now().Format("2006-01-02"))
-	u.invoiceDueDate.SetText(time.Now().AddDate(0, 0, 14).Format("2006-01-02"))
-	u.invoiceTaxRate.SetText("0")
-	u.invoiceNotes.SetText("")
-	u.invoiceItems = u.invoiceItems[:0]
-	if u.invoiceItemsList != nil {
-		u.invoiceItemsList.Refresh()
-	}
-	if u.invoiceProfileSelect != nil {
-		u.invoiceProfileSelect.Selected = ""
-		u.invoiceProfileSelect.Refresh()
-	}
-	if u.invoiceCustomerSelect != nil {
-		u.invoiceCustomerSelect.Selected = ""
-		u.invoiceCustomerSelect.Refresh()
-	}
-	if u.invoiceForm != nil {
-		u.invoiceForm.SubmitText = "Create Invoice"
-		u.invoiceForm.Refresh()
-	}
-	u.updateInvoiceTotals()
-}
-
-func (u *UI) loadInvoiceForEdit(inv models.Invoice) {
-	u.invoiceEditingID = inv.ID
-	u.invoiceItems = append([]models.InvoiceItem(nil), inv.Items...)
-	if u.invoiceItemsList != nil {
-		u.invoiceItemsList.Refresh()
-	}
-
-	u.invoiceIssueDate.SetText(inv.IssueDate.Format("2006-01-02"))
-	u.invoiceDueDate.SetText(inv.DueDate.Format("2006-01-02"))
-	u.invoiceTaxRate.SetText(fmt.Sprintf("%.2f", inv.TaxRatePercent))
-	u.invoiceNotes.SetText(inv.Notes)
-
-	if profile, err := u.store.GetProfile(inv.ProfileID); err == nil {
-		label := u.profileLabel(profile)
-		if contains(u.invoiceProfileSelect.Options, label) {
-			u.invoiceProfileSelect.SetSelected(label)
+func (u *UI) profileByID(id string) (models.Profile, bool) {
+	for _, profile := range u.profiles {
+		if profile.ID == id {
+			return profile, true
 		}
 	}
-	if customer, err := u.store.GetCustomer(inv.CustomerID); err == nil {
-		label := u.customerLabel(customer)
-		if contains(u.invoiceCustomerSelect.Options, label) {
-			u.invoiceCustomerSelect.SetSelected(label)
-		}
-	}
-
-	if u.invoiceForm != nil {
-		u.invoiceForm.SubmitText = "Update Invoice"
-		u.invoiceForm.Refresh()
-	}
-	u.updateInvoiceTotals()
+	return models.Profile{}, false
 }
 
-func contains(vals []string, target string) bool {
-	for _, v := range vals {
-		if v == target {
+func (u *UI) customerByID(id string) (models.Customer, bool) {
+	for _, customer := range u.customers {
+		if customer.ID == id {
+			return customer, true
+		}
+	}
+	return models.Customer{}, false
+}
+
+func invoiceBadge(inv models.Invoice) string {
+	now := time.Now()
+	if inv.DueDate.Before(now) {
+		return "⛔ Overdue"
+	}
+	if inv.DueDate.Sub(now) <= 72*time.Hour {
+		return "⚠️ Due soon"
+	}
+	return "✅ On track"
+}
+
+func contains(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
 			return true
 		}
 	}
 	return false
+}
+
+func themePlusIcon() fyne.Resource {
+	return theme.ContentAddIcon()
 }
