@@ -11,13 +11,14 @@ import (
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
 
+	"github.com/janmarkuslanger/invoiceio/internal/i18n"
 	"github.com/janmarkuslanger/invoiceio/internal/id"
 	"github.com/janmarkuslanger/invoiceio/internal/models"
 )
 
 func (u *UI) makeCustomersTab() fyne.CanvasObject {
-	u.customerDetailText = widget.NewRichTextFromMarkdown("_Select a customer to view details._")
-	detailCard := widget.NewCard("Customer Details", "", u.customerDetailText)
+	u.customerDetailText = widget.NewRichTextFromMarkdown(i18n.T("customers.detail.empty"))
+	detailCard := widget.NewCard(i18n.T("customers.detail.title"), "", u.customerDetailText)
 
 	u.customerList = widget.NewList(
 		func() int { return len(u.customers) },
@@ -40,10 +41,10 @@ func (u *UI) makeCustomersTab() fyne.CanvasObject {
 		u.customerEditButton.Enable()
 	}
 
-	newButton := widget.NewButtonWithIcon("New Customer", themePlusIcon(), func() {
+	newButton := widget.NewButtonWithIcon(i18n.T("customers.button.new"), themePlusIcon(), func() {
 		u.openCustomerDialog(nil)
 	})
-	u.customerEditButton = widget.NewButton("Edit Selected", func() {
+	u.customerEditButton = widget.NewButton(i18n.T("button.editSelected"), func() {
 		if u.selectedCustomer < 0 || u.selectedCustomer >= len(u.customers) {
 			return
 		}
@@ -65,18 +66,18 @@ func (u *UI) makeCustomersTab() fyne.CanvasObject {
 
 func (u *UI) openCustomerDialog(existing *models.Customer) {
 	isEdit := existing != nil
-	title := "New Customer"
-	submitLabel := "Create"
+	title := i18n.T("customers.dialog.newTitle")
+	submitLabel := i18n.T("customers.dialog.create")
 	var current models.Customer
 	if isEdit {
-		title = "Edit Customer"
-		submitLabel = "Update"
+		title = i18n.T("customers.dialog.editTitle")
+		submitLabel = i18n.T("customers.dialog.update")
 		current = *existing
 	}
 
 	displayName := widget.NewEntry()
-	displayName.SetPlaceHolder("Required")
-	displayName.Validator = validation.NewRegexp(`\S+`, "Display name is required")
+	displayName.SetPlaceHolder(i18n.T("forms.placeholder.required"))
+	displayName.Validator = validation.NewRegexp(`\S+`, i18n.T("customers.error.displayNameRequired"))
 	contactName := widget.NewEntry()
 	email := widget.NewEntry()
 	phone := widget.NewEntry()
@@ -101,21 +102,21 @@ func (u *UI) openCustomerDialog(existing *models.Customer) {
 	}
 
 	form := widget.NewForm(
-		widget.NewFormItem("Display Name", displayName),
-		widget.NewFormItem("Contact Name", contactName),
-		widget.NewFormItem("Email", email),
-		widget.NewFormItem("Phone", phone),
-		widget.NewFormItem("Address Line 1", address1),
-		widget.NewFormItem("Address Line 2", address2),
-		widget.NewFormItem("City", city),
-		widget.NewFormItem("Postal Code", postalCode),
-		widget.NewFormItem("Country", country),
-		widget.NewFormItem("Notes", notes),
+		widget.NewFormItem(i18n.T("customers.form.displayName"), displayName),
+		widget.NewFormItem(i18n.T("customers.form.contactName"), contactName),
+		widget.NewFormItem(i18n.T("customers.form.email"), email),
+		widget.NewFormItem(i18n.T("customers.form.phone"), phone),
+		widget.NewFormItem(i18n.T("customers.form.address1"), address1),
+		widget.NewFormItem(i18n.T("customers.form.address2"), address2),
+		widget.NewFormItem(i18n.T("customers.form.city"), city),
+		widget.NewFormItem(i18n.T("customers.form.postalCode"), postalCode),
+		widget.NewFormItem(i18n.T("customers.form.country"), country),
+		widget.NewFormItem(i18n.T("customers.form.notes"), notes),
 	)
 
 	u.showFormDialog(title, submitLabel, form, func() error {
 		if strings.TrimSpace(displayName.Text) == "" {
-			return fmt.Errorf("display name is required")
+			return fmt.Errorf("%s", i18n.T("customers.error.displayNameRequired"))
 		}
 		now := time.Now()
 		customerID := ""
@@ -142,14 +143,14 @@ func (u *UI) openCustomerDialog(existing *models.Customer) {
 			UpdatedAt:    now,
 		}
 		if err := u.store.SaveCustomer(customer); err != nil {
-			return fmt.Errorf("save customer: %w", err)
+			return fmt.Errorf("%s: %w", i18n.T("customers.error.save"), err)
 		}
 		u.refreshCustomers(customer.ID)
 		u.lastCustomerID = customer.ID
 		if isEdit {
-			dialog.ShowInformation("Customer updated", fmt.Sprintf("Customer %s updated.", customer.DisplayName), u.win)
+			dialog.ShowInformation(i18n.T("customers.info.updatedTitle"), i18n.T("customers.info.updatedBody", customer.DisplayName), u.win)
 		} else {
-			dialog.ShowInformation("Customer created", fmt.Sprintf("Customer %s stored.", customer.DisplayName), u.win)
+			dialog.ShowInformation(i18n.T("customers.info.createdTitle"), i18n.T("customers.info.createdBody", customer.DisplayName), u.win)
 		}
 		return nil
 	})
@@ -160,24 +161,28 @@ func (u *UI) updateCustomerDetail() {
 		return
 	}
 	if u.selectedCustomer < 0 || u.selectedCustomer >= len(u.customers) {
-		u.customerDetailText.ParseMarkdown("_Select a customer to view details._")
+		u.customerDetailText.ParseMarkdown(i18n.T("customers.detail.empty"))
 		return
 	}
 	c := u.customers[u.selectedCustomer]
 	lines := []string{
-		fmt.Sprintf("**Display Name:** %s", c.DisplayName),
-		fmt.Sprintf("**Contact:** %s", c.ContactName),
-		fmt.Sprintf("**Email:** %s", c.Email),
-		fmt.Sprintf("**Phone:** %s", c.Phone),
+		i18n.T("customers.detail.displayName", c.DisplayName),
+		i18n.T("customers.detail.contact", c.ContactName),
+		i18n.T("customers.detail.email", c.Email),
+		i18n.T("customers.detail.phone", c.Phone),
 		"",
-		"**Address**",
-		strings.TrimSpace(c.AddressLine1),
-		strings.TrimSpace(c.AddressLine2),
-		fmt.Sprintf("%s %s", strings.TrimSpace(c.PostalCode), strings.TrimSpace(c.City)),
-		strings.TrimSpace(c.Country),
+		i18n.T("customers.detail.addressTitle"),
 	}
+	if line := strings.TrimSpace(c.AddressLine1); line != "" {
+		lines = append(lines, line)
+	}
+	if line := strings.TrimSpace(c.AddressLine2); line != "" {
+		lines = append(lines, line)
+	}
+	lines = append(lines, i18n.T("customers.detail.cityPostal", strings.TrimSpace(c.PostalCode), strings.TrimSpace(c.City)))
+	lines = append(lines, i18n.T("customers.detail.country", strings.TrimSpace(c.Country)))
 	if strings.TrimSpace(c.Notes) != "" {
-		lines = append(lines, "", "**Notes**", c.Notes)
+		lines = append(lines, "", i18n.T("customers.detail.notesTitle"), c.Notes)
 	}
 	u.customerDetailText.ParseMarkdown(strings.Join(lines, "\n"))
 }

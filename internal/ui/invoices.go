@@ -14,15 +14,16 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
+	"github.com/janmarkuslanger/invoiceio/internal/i18n"
 	"github.com/janmarkuslanger/invoiceio/internal/id"
 	"github.com/janmarkuslanger/invoiceio/internal/models"
 	"github.com/janmarkuslanger/invoiceio/internal/pdf"
 )
 
 func (u *UI) makeInvoicesTab() fyne.CanvasObject {
-	u.invoiceDetailText = widget.NewRichTextFromMarkdown("_Select an invoice to view details._")
+	u.invoiceDetailText = widget.NewRichTextFromMarkdown(i18n.T("invoices.detail.empty"))
 	u.invoiceDetailText.Wrapping = fyne.TextWrapWord
-	detailCard := widget.NewCard("Invoice Details", "", u.invoiceDetailText)
+	detailCard := widget.NewCard(i18n.T("invoices.detail.title"), "", u.invoiceDetailText)
 	detailScroll := container.NewVScroll(detailCard)
 
 	u.invoiceList = widget.NewList(
@@ -44,10 +45,10 @@ func (u *UI) makeInvoicesTab() fyne.CanvasObject {
 		u.invoiceEditButton.Enable()
 	}
 
-	newButton := widget.NewButtonWithIcon("New Invoice", themePlusIcon(), func() {
+	newButton := widget.NewButtonWithIcon(i18n.T("invoices.button.new"), themePlusIcon(), func() {
 		u.openInvoiceDialog(nil)
 	})
-	u.invoiceEditButton = widget.NewButton("Edit Selected", func() {
+	u.invoiceEditButton = widget.NewButton(i18n.T("button.editSelected"), func() {
 		if u.selectedInvoice < 0 || u.selectedInvoice >= len(u.invoices) {
 			return
 		}
@@ -69,12 +70,12 @@ func (u *UI) makeInvoicesTab() fyne.CanvasObject {
 
 func (u *UI) openInvoiceDialog(existing *models.Invoice) {
 	isEdit := existing != nil
-	title := "New Invoice"
-	submitLabel := "Create"
+	title := i18n.T("invoices.dialog.newTitle")
+	submitLabel := i18n.T("invoices.dialog.create")
 	var current models.Invoice
 	if isEdit {
-		title = "Edit Invoice"
-		submitLabel = "Update"
+		title = i18n.T("invoices.dialog.editTitle")
+		submitLabel = i18n.T("invoices.dialog.update")
 		current = *existing
 	}
 
@@ -82,15 +83,15 @@ func (u *UI) openInvoiceDialog(existing *models.Invoice) {
 	customerOptions := u.customerOptions()
 
 	profileSelect := widget.NewSelect(profileOptions, nil)
-	profileSelect.PlaceHolder = "Select profile"
+	profileSelect.PlaceHolder = i18n.T("invoices.form.profilePlaceholder")
 	customerSelect := widget.NewSelect(customerOptions, nil)
-	customerSelect.PlaceHolder = "Select customer"
+	customerSelect.PlaceHolder = i18n.T("invoices.form.customerPlaceholder")
 	issueDate := widget.NewEntry()
-	issueDate.SetPlaceHolder("YYYY-MM-DD")
+	issueDate.SetPlaceHolder(i18n.T("invoices.form.issueDatePlaceholder"))
 	dueDate := widget.NewEntry()
-	dueDate.SetPlaceHolder("YYYY-MM-DD")
+	dueDate.SetPlaceHolder(i18n.T("invoices.form.dueDatePlaceholder"))
 	taxRate := widget.NewEntry()
-	taxRate.SetPlaceHolder("0")
+	taxRate.SetPlaceHolder(i18n.T("invoices.form.taxRatePlaceholder"))
 	notes := widget.NewMultiLineEntry()
 	items := make([]models.InvoiceItem, 0)
 
@@ -143,9 +144,9 @@ func (u *UI) openInvoiceDialog(existing *models.Invoice) {
 	}
 
 	lineItemsContainer := container.NewVBox()
-	subtotalLabel := widget.NewLabel("Subtotal: 0.00")
-	taxLabel := widget.NewLabel("Tax: 0.00")
-	totalLabel := widget.NewLabel("Total: 0.00")
+	subtotalLabel := widget.NewLabel("")
+	taxLabel := widget.NewLabel("")
+	totalLabel := widget.NewLabel("")
 
 	updateTotals := func() {
 		subtotal := 0.0
@@ -160,9 +161,9 @@ func (u *UI) openInvoiceDialog(existing *models.Invoice) {
 		}
 		taxAmount := subtotal * (taxPercent / 100)
 		total := subtotal + taxAmount
-		subtotalLabel.SetText(fmt.Sprintf("Subtotal: %.2f", subtotal))
-		taxLabel.SetText(fmt.Sprintf("Tax: %.2f (%.2f%%)", taxAmount, taxPercent))
-		totalLabel.SetText(fmt.Sprintf("Total: %.2f", total))
+		subtotalLabel.SetText(i18n.T("invoices.summary.subtotal", subtotal))
+		taxLabel.SetText(i18n.T("invoices.summary.tax", taxAmount, taxPercent))
+		totalLabel.SetText(i18n.T("invoices.summary.total", total))
 	}
 
 	taxRate.OnChanged = func(string) {
@@ -173,7 +174,7 @@ func (u *UI) openInvoiceDialog(existing *models.Invoice) {
 	renderLineItems = func() {
 		lineItemsContainer.Objects = nil
 		if len(items) == 0 {
-			lineItemsContainer.Add(widget.NewLabel("No line items yet. Use 'Add Line Item' to start."))
+			lineItemsContainer.Add(widget.NewLabel(i18n.T("invoices.lineItems.empty", i18n.T("invoices.lineItems.add"))))
 			updateTotals()
 			lineItemsContainer.Refresh()
 			return
@@ -238,15 +239,15 @@ func (u *UI) openInvoiceDialog(existing *models.Invoice) {
 		renderLineItems()
 	}
 
-	addItemButton := widget.NewButtonWithIcon("Add Line Item", theme.ContentAddIcon(), func() {
+	addItemButton := widget.NewButtonWithIcon(i18n.T("invoices.lineItems.add"), theme.ContentAddIcon(), func() {
 		addRow(models.InvoiceItem{Description: "", Quantity: 1, UnitPrice: 0, LineTotal: 0})
 	})
 
 	headerRow := container.NewGridWithColumns(5,
-		makeHeaderLabel("Description"),
-		makeHeaderLabel("Qty"),
-		makeHeaderLabel("Unit"),
-		makeHeaderLabel("Line Total"),
+		makeHeaderLabel(i18n.T("invoices.table.description")),
+		makeHeaderLabel(i18n.T("invoices.table.quantity")),
+		makeHeaderLabel(i18n.T("invoices.table.unit")),
+		makeHeaderLabel(i18n.T("invoices.table.lineTotal")),
 		widget.NewLabel(""),
 	)
 
@@ -254,7 +255,7 @@ func (u *UI) openInvoiceDialog(existing *models.Invoice) {
 	itemsScroll := container.NewVScroll(lineItemsContainer)
 	itemsScroll.SetMinSize(fyne.NewSize(0, 200))
 
-	summaryCard := widget.NewCard("Invoice Summary", "", container.NewVBox(subtotalLabel, taxLabel, totalLabel))
+	summaryCard := widget.NewCard(i18n.T("invoices.summary.title"), "", container.NewVBox(subtotalLabel, taxLabel, totalLabel))
 
 	if len(items) == 0 && !isEdit {
 		addRow(models.InvoiceItem{Description: "", Quantity: 1, UnitPrice: 0, LineTotal: 0})
@@ -263,12 +264,12 @@ func (u *UI) openInvoiceDialog(existing *models.Invoice) {
 	}
 
 	form := widget.NewForm(
-		widget.NewFormItem("Profile", profileSelect),
-		widget.NewFormItem("Customer", customerSelect),
-		widget.NewFormItem("Issue Date (YYYY-MM-DD)", issueDate),
-		widget.NewFormItem("Due Date (YYYY-MM-DD)", dueDate),
-		widget.NewFormItem("Tax Rate (%)", taxRate),
-		widget.NewFormItem("Notes", notes),
+		widget.NewFormItem(i18n.T("invoices.form.profile"), profileSelect),
+		widget.NewFormItem(i18n.T("invoices.form.customer"), customerSelect),
+		widget.NewFormItem(i18n.T("invoices.form.issueDate"), issueDate),
+		widget.NewFormItem(i18n.T("invoices.form.dueDate"), dueDate),
+		widget.NewFormItem(i18n.T("invoices.form.taxRate"), taxRate),
+		widget.NewFormItem(i18n.T("invoices.form.notes"), notes),
 	)
 
 	lineItemsSection := container.NewVBox(
@@ -281,7 +282,7 @@ func (u *UI) openInvoiceDialog(existing *models.Invoice) {
 	content := container.NewVBox(form, widget.NewSeparator(), lineItemsSection)
 
 	save := widget.NewButton(submitLabel, nil)
-	cancel := widget.NewButton("Cancel", nil)
+	cancel := widget.NewButton(i18n.T("common.cancel"), nil)
 	status := widget.NewLabel("")
 	status.Wrapping = fyne.TextWrapWord
 	status.Hide()
@@ -297,43 +298,43 @@ func (u *UI) openInvoiceDialog(existing *models.Invoice) {
 
 	save.OnTapped = func() {
 		if len(profileOptions) == 0 || len(customerOptions) == 0 {
-			status.SetText("Please create at least one profile and one customer first.")
+			status.SetText(i18n.T("invoices.error.setupRequired"))
 			status.Show()
 			return
 		}
 		profileLabel := profileSelect.Selected
 		customerLabel := customerSelect.Selected
 		if profileLabel == "" || customerLabel == "" {
-			status.SetText("Profile and customer selection are required.")
+			status.SetText(i18n.T("invoices.error.selectionRequired"))
 			status.Show()
 			return
 		}
 		profileModel, ok := u.profileByLabel(profileLabel)
 		if !ok {
-			status.SetText("Selected profile could not be found.")
+			status.SetText(i18n.T("invoices.error.profileMissing"))
 			status.Show()
 			return
 		}
 		customerModel, ok := u.customerByLabel(customerLabel)
 		if !ok {
-			status.SetText("Selected customer could not be found.")
+			status.SetText(i18n.T("invoices.error.customerMissing"))
 			status.Show()
 			return
 		}
 		if len(items) == 0 {
-			status.SetText("Add at least one line item.")
+			status.SetText(i18n.T("invoices.error.noItems"))
 			status.Show()
 			return
 		}
 		issue, err := time.Parse("2006-01-02", strings.TrimSpace(issueDate.Text))
 		if err != nil {
-			status.SetText("Invalid issue date. Use YYYY-MM-DD.")
+			status.SetText(i18n.T("invoices.error.issueDate"))
 			status.Show()
 			return
 		}
 		due, err := time.Parse("2006-01-02", strings.TrimSpace(dueDate.Text))
 		if err != nil {
-			status.SetText("Invalid due date. Use YYYY-MM-DD.")
+			status.SetText(i18n.T("invoices.error.dueDate"))
 			status.Show()
 			return
 		}
@@ -341,7 +342,7 @@ func (u *UI) openInvoiceDialog(existing *models.Invoice) {
 		if strings.TrimSpace(taxRate.Text) != "" {
 			taxPercent, err = strconv.ParseFloat(strings.TrimSpace(taxRate.Text), 64)
 			if err != nil {
-				status.SetText("Tax rate must be a number.")
+				status.SetText(i18n.T("invoices.error.taxRate"))
 				status.Show()
 				return
 			}
@@ -393,12 +394,12 @@ func (u *UI) openInvoiceDialog(existing *models.Invoice) {
 		}
 
 		if err := u.store.SaveInvoice(invoice); err != nil {
-			status.SetText(fmt.Sprintf("Save failed: %v", err))
+			status.SetText(i18n.T("invoices.error.saveFailed", err))
 			status.Show()
 			return
 		}
 		if err := pdf.CreateInvoicePDF(pdfPath, profileModel, customerModel, invoice); err != nil {
-			status.SetText(fmt.Sprintf("PDF generation failed: %v", err))
+			status.SetText(i18n.T("invoices.error.pdfFailed", err))
 			status.Show()
 			return
 		}
@@ -407,9 +408,9 @@ func (u *UI) openInvoiceDialog(existing *models.Invoice) {
 		u.lastCustomerID = invoice.CustomerID
 		u.refreshInvoices(invoice.ID)
 		if isEdit {
-			dialog.ShowInformation("Invoice updated", fmt.Sprintf("Invoice %s regenerated. PDF stored at %s.", invoice.Number, pdfPath), u.win)
+			dialog.ShowInformation(i18n.T("invoices.info.updatedTitle"), i18n.T("invoices.info.updatedBody", invoice.Number, pdfPath), u.win)
 		} else {
-			dialog.ShowInformation("Invoice created", fmt.Sprintf("Invoice %s generated. PDF stored at %s.", invoice.Number, pdfPath), u.win)
+			dialog.ShowInformation(i18n.T("invoices.info.createdTitle"), i18n.T("invoices.info.createdBody", invoice.Number, pdfPath), u.win)
 		}
 		dlg.Hide()
 	}
@@ -423,7 +424,7 @@ func (u *UI) updateInvoiceDetail() {
 		return
 	}
 	if u.selectedInvoice < 0 || u.selectedInvoice >= len(u.invoices) {
-		u.invoiceDetailText.ParseMarkdown("_Select an invoice to view details._")
+		u.invoiceDetailText.ParseMarkdown(i18n.T("invoices.detail.empty"))
 		return
 	}
 	inv := u.invoices[u.selectedInvoice]
@@ -440,30 +441,30 @@ func (u *UI) updateInvoiceDetail() {
 	daysUntilDue := int(inv.DueDate.Sub(now).Hours() / 24)
 	dueDescriptor := ""
 	if daysUntilDue < 0 {
-		dueDescriptor = fmt.Sprintf("Overdue by %d days", -daysUntilDue)
+		dueDescriptor = i18n.T("invoices.due.overdueBy", -daysUntilDue)
 	} else {
-		dueDescriptor = fmt.Sprintf("Due in %d days", daysUntilDue)
+		dueDescriptor = i18n.T("invoices.due.inDays", daysUntilDue)
 	}
 
 	lines := []string{
-		fmt.Sprintf("**Invoice:** %s", inv.Number),
-		fmt.Sprintf("**Status:** %s (%s)", status, dueDescriptor),
-		fmt.Sprintf("**Profile:** %s", profileName),
-		fmt.Sprintf("**Customer:** %s", customerName),
-		fmt.Sprintf("**Issued:** %s", inv.IssueDate.Format("2006-01-02")),
-		fmt.Sprintf("**Due:** %s", inv.DueDate.Format("2006-01-02")),
-		fmt.Sprintf("**Subtotal:** %.2f", inv.Subtotal),
-		fmt.Sprintf("**Tax:** %.2f (%.2f%%)", inv.TaxAmount, inv.TaxRatePercent),
-		fmt.Sprintf("**Total:** %.2f", inv.Total),
-		fmt.Sprintf("**PDF:** %s", inv.PDFPath),
+		i18n.T("invoices.detail.invoice", inv.Number),
+		i18n.T("invoices.detail.status", status, dueDescriptor),
+		i18n.T("invoices.detail.profile", profileName),
+		i18n.T("invoices.detail.customer", customerName),
+		i18n.T("invoices.detail.issued", inv.IssueDate.Format("2006-01-02")),
+		i18n.T("invoices.detail.due", inv.DueDate.Format("2006-01-02")),
+		i18n.T("invoices.detail.subtotal", inv.Subtotal),
+		i18n.T("invoices.detail.tax", inv.TaxAmount, inv.TaxRatePercent),
+		i18n.T("invoices.detail.total", inv.Total),
+		i18n.T("invoices.detail.pdf", inv.PDFPath),
 		"",
-		"**Line Items**",
+		i18n.T("invoices.detail.lineItems"),
 	}
 	for _, item := range inv.Items {
-		lines = append(lines, fmt.Sprintf("- %s: %.2f × %.2f = %.2f", item.Description, item.Quantity, item.UnitPrice, item.LineTotal))
+		lines = append(lines, i18n.T("invoices.detail.lineItem", item.Description, item.Quantity, item.UnitPrice, item.LineTotal))
 	}
 	if strings.TrimSpace(inv.Notes) != "" {
-		lines = append(lines, "", "**Notes**", inv.Notes)
+		lines = append(lines, "", i18n.T("invoices.detail.notesTitle"), inv.Notes)
 	}
 	u.invoiceDetailText.ParseMarkdown(strings.Join(lines, "\n"))
 }

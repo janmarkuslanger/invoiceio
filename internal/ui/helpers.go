@@ -9,6 +9,7 @@ import (
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
 
+	"github.com/janmarkuslanger/invoiceio/internal/i18n"
 	"github.com/janmarkuslanger/invoiceio/internal/models"
 )
 
@@ -83,12 +84,12 @@ func (u *UI) customerByID(id string) (models.Customer, bool) {
 func invoiceBadge(inv models.Invoice) string {
 	now := time.Now()
 	if inv.DueDate.Before(now) {
-		return "⛔ Overdue"
+		return i18n.T("invoices.badge.overdue")
 	}
 	if inv.DueDate.Sub(now) <= 72*time.Hour {
-		return "⚠️ Due soon"
+		return i18n.T("invoices.badge.dueSoon")
 	}
-	return "✅ On track"
+	return i18n.T("invoices.badge.onTrack")
 }
 
 func contains(values []string, target string) bool {

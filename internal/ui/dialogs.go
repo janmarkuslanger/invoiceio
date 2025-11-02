@@ -6,6 +6,8 @@ import (
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
+
+	"github.com/janmarkuslanger/invoiceio/internal/i18n"
 )
 
 func (u *UI) showFormDialog(title, submitLabel string, form *widget.Form, submit func() error) {
@@ -14,7 +16,7 @@ func (u *UI) showFormDialog(title, submitLabel string, form *widget.Form, submit
 	status.Hide()
 
 	save := widget.NewButton(submitLabel, nil)
-	cancel := widget.NewButton("Cancel", nil)
+	cancel := widget.NewButton(i18n.T("common.cancel"), nil)
 	buttons := container.NewHBox(layout.NewSpacer(), cancel, save)
 	content := container.NewVBox(form, status, buttons)
 

@@ -1,11 +1,15 @@
 package ui
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/janmarkuslanger/invoiceio/internal/i18n"
+)
 
 func (u *UI) refreshProfiles(selectedIDs ...string) {
 	profiles, err := u.store.ListProfiles()
 	if err != nil {
-		dialogError(u.win, fmt.Errorf("load profiles: %w", err))
+		dialogError(u.win, fmt.Errorf("%s: %v", i18n.T("errors.loadProfiles"), err))
 		return
 	}
 	targetID := ""
@@ -49,7 +53,7 @@ func (u *UI) refreshProfiles(selectedIDs ...string) {
 func (u *UI) refreshCustomers(selectedIDs ...string) {
 	customers, err := u.store.ListCustomers()
 	if err != nil {
-		dialogError(u.win, fmt.Errorf("load customers: %w", err))
+		dialogError(u.win, fmt.Errorf("%s: %v", i18n.T("errors.loadCustomers"), err))
 		return
 	}
 	targetID := ""
@@ -93,7 +97,7 @@ func (u *UI) refreshCustomers(selectedIDs ...string) {
 func (u *UI) refreshInvoices(selectedIDs ...string) {
 	invoices, err := u.store.ListInvoices()
 	if err != nil {
-		dialogError(u.win, fmt.Errorf("load invoices: %w", err))
+		dialogError(u.win, fmt.Errorf("%s: %v", i18n.T("errors.loadInvoices"), err))
 		return
 	}
 	targetID := ""
@@ -111,7 +115,7 @@ func (u *UI) refreshInvoices(selectedIDs ...string) {
 			customerLabel = cust.DisplayName
 		}
 		status := invoiceBadge(inv)
-		u.invoiceSummaries[idx] = fmt.Sprintf("%s | %s – %s – Total %.2f", status, inv.Number, customerLabel, inv.Total)
+		u.invoiceSummaries[idx] = i18n.T("invoices.summary.listEntry", status, inv.Number, customerLabel, inv.Total)
 	}
 
 	u.selectedInvoice = -1

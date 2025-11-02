@@ -8,6 +8,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
+	"github.com/janmarkuslanger/invoiceio/internal/i18n"
 	"github.com/janmarkuslanger/invoiceio/internal/models"
 	"github.com/janmarkuslanger/invoiceio/internal/storage"
 )
@@ -54,27 +55,50 @@ func New(store *storage.Storage, win fyne.Window) *UI {
 
 // Build assembles the application layout.
 func (u *UI) Build() fyne.CanvasObject {
-	profilesTab := container.NewTabItem("Profiles", u.makeProfilesTab())
-	customersTab := container.NewTabItem("Customers", u.makeCustomersTab())
-	invoicesTab := container.NewTabItem("Invoices", u.makeInvoicesTab())
+	profilesTab := container.NewTabItem(i18n.T("tabs.profiles"), u.makeProfilesTab())
+	customersTab := container.NewTabItem(i18n.T("tabs.customers"), u.makeCustomersTab())
+	invoicesTab := container.NewTabItem(i18n.T("tabs.invoices"), u.makeInvoicesTab())
 
 	tabs := container.NewAppTabs(profilesTab, customersTab, invoicesTab)
 	tabs.SetTabLocation(container.TabLocationTop)
 
-	newProfileButton := widget.NewButtonWithIcon("New Profile", theme.AccountIcon(), func() {
+	newProfileButton := widget.NewButtonWithIcon(i18n.T("toolbar.newProfile"), theme.AccountIcon(), func() {
 		u.openProfileDialog(nil)
 	})
-	newCustomerButton := widget.NewButtonWithIcon("New Customer", theme.AccountIcon(), func() {
+	newCustomerButton := widget.NewButtonWithIcon(i18n.T("toolbar.newCustomer"), theme.AccountIcon(), func() {
 		u.openCustomerDialog(nil)
 	})
-	newInvoiceButton := widget.NewButtonWithIcon("New Invoice", theme.DocumentCreateIcon(), func() {
+	newInvoiceButton := widget.NewButtonWithIcon(i18n.T("toolbar.newInvoice"), theme.DocumentCreateIcon(), func() {
 		if len(u.profiles) == 0 || len(u.customers) == 0 {
-			dialog.ShowInformation("Setup required", "Create at least one profile and one customer first.", u.win)
+			dialog.ShowInformation(i18n.T("messages.setupRequired.title"), i18n.T("messages.setupRequired.body"), u.win)
 			return
 		}
 		u.openInvoiceDialog(nil)
 	})
-	toolbar := container.NewHBox(newProfileButton, newCustomerButton, newInvoiceButton, layout.NewSpacer())
+	locales := i18n.Supported()
+	labels := make([]string, len(locales))
+	labelToLocale := make(map[string]i18n.Locale, len(locales))
+	for i, loc := range locales {
+		label := i18n.DisplayName(loc)
+		labels[i] = label
+		labelToLocale[label] = loc
+	}
+	currentLabel := i18n.DisplayName(i18n.Current())
+	localeSelect := widget.NewSelect(labels, func(label string) {
+		loc, ok := labelToLocale[label]
+		if !ok || loc == i18n.Current() {
+			return
+		}
+		if err := i18n.SetLocale(loc); err != nil {
+			dialog.ShowError(err, u.win)
+			return
+		}
+		u.win.SetContent(u.Build())
+	})
+	localeSelect.SetSelected(currentLabel)
+
+	languageLabel := widget.NewLabel(i18n.T("toolbar.language"))
+	toolbar := container.NewHBox(newProfileButton, newCustomerButton, newInvoiceButton, languageLabel, localeSelect, layout.NewSpacer())
 	top := container.NewVBox(toolbar, widget.NewSeparator())
 
 	u.refreshProfiles()

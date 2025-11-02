@@ -11,13 +11,14 @@ import (
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
 
+	"github.com/janmarkuslanger/invoiceio/internal/i18n"
 	"github.com/janmarkuslanger/invoiceio/internal/id"
 	"github.com/janmarkuslanger/invoiceio/internal/models"
 )
 
 func (u *UI) makeProfilesTab() fyne.CanvasObject {
-	u.profileDetailText = widget.NewRichTextFromMarkdown("_Select a profile to view details._")
-	detailCard := widget.NewCard("Profile Details", "", u.profileDetailText)
+	u.profileDetailText = widget.NewRichTextFromMarkdown(i18n.T("profiles.detail.empty"))
+	detailCard := widget.NewCard(i18n.T("profiles.detail.title"), "", u.profileDetailText)
 
 	u.profileList = widget.NewList(
 		func() int { return len(u.profiles) },
@@ -39,10 +40,10 @@ func (u *UI) makeProfilesTab() fyne.CanvasObject {
 		u.profileEditButton.Enable()
 	}
 
-	newButton := widget.NewButtonWithIcon("New Profile", themePlusIcon(), func() {
+	newButton := widget.NewButtonWithIcon(i18n.T("profiles.button.new"), themePlusIcon(), func() {
 		u.openProfileDialog(nil)
 	})
-	u.profileEditButton = widget.NewButton("Edit Selected", func() {
+	u.profileEditButton = widget.NewButton(i18n.T("button.editSelected"), func() {
 		if u.selectedProfile < 0 || u.selectedProfile >= len(u.profiles) {
 			return
 		}
@@ -64,18 +65,18 @@ func (u *UI) makeProfilesTab() fyne.CanvasObject {
 
 func (u *UI) openProfileDialog(existing *models.Profile) {
 	isEdit := existing != nil
-	title := "New Profile"
-	submitLabel := "Create"
+	title := i18n.T("profiles.dialog.newTitle")
+	submitLabel := i18n.T("profiles.dialog.create")
 	var current models.Profile
 	if isEdit {
-		title = "Edit Profile"
-		submitLabel = "Update"
+		title = i18n.T("profiles.dialog.editTitle")
+		submitLabel = i18n.T("profiles.dialog.update")
 		current = *existing
 	}
 
 	displayName := widget.NewEntry()
-	displayName.SetPlaceHolder("Required")
-	displayName.Validator = validation.NewRegexp(`\S+`, "Display name is required")
+	displayName.SetPlaceHolder(i18n.T("forms.placeholder.required"))
+	displayName.Validator = validation.NewRegexp(`\S+`, i18n.T("profiles.error.displayNameRequired"))
 	companyName := widget.NewEntry()
 	address1 := widget.NewEntry()
 	address2 := widget.NewEntry()
@@ -108,25 +109,25 @@ func (u *UI) openProfileDialog(existing *models.Profile) {
 	}
 
 	form := widget.NewForm(
-		widget.NewFormItem("Display Name", displayName),
-		widget.NewFormItem("Company Name", companyName),
-		widget.NewFormItem("Address Line 1", address1),
-		widget.NewFormItem("Address Line 2", address2),
-		widget.NewFormItem("City", city),
-		widget.NewFormItem("Postal Code", postalCode),
-		widget.NewFormItem("Country", country),
-		widget.NewFormItem("Email", email),
-		widget.NewFormItem("Phone", phone),
-		widget.NewFormItem("Tax ID", taxID),
-		widget.NewFormItem("Bank Name", bankName),
-		widget.NewFormItem("IBAN", iban),
-		widget.NewFormItem("BIC", bic),
-		widget.NewFormItem("Payment Terms", paymentTerms),
+		widget.NewFormItem(i18n.T("profiles.form.displayName"), displayName),
+		widget.NewFormItem(i18n.T("profiles.form.companyName"), companyName),
+		widget.NewFormItem(i18n.T("profiles.form.address1"), address1),
+		widget.NewFormItem(i18n.T("profiles.form.address2"), address2),
+		widget.NewFormItem(i18n.T("profiles.form.city"), city),
+		widget.NewFormItem(i18n.T("profiles.form.postalCode"), postalCode),
+		widget.NewFormItem(i18n.T("profiles.form.country"), country),
+		widget.NewFormItem(i18n.T("profiles.form.email"), email),
+		widget.NewFormItem(i18n.T("profiles.form.phone"), phone),
+		widget.NewFormItem(i18n.T("profiles.form.taxID"), taxID),
+		widget.NewFormItem(i18n.T("profiles.form.bankName"), bankName),
+		widget.NewFormItem(i18n.T("profiles.form.iban"), iban),
+		widget.NewFormItem(i18n.T("profiles.form.bic"), bic),
+		widget.NewFormItem(i18n.T("profiles.form.paymentTerms"), paymentTerms),
 	)
 
 	u.showFormDialog(title, submitLabel, form, func() error {
 		if strings.TrimSpace(displayName.Text) == "" {
-			return fmt.Errorf("display name is required")
+			return fmt.Errorf("%s", i18n.T("profiles.error.displayNameRequired"))
 		}
 		now := time.Now()
 		profileID := ""
@@ -159,14 +160,14 @@ func (u *UI) openProfileDialog(existing *models.Profile) {
 			UpdatedAt: now,
 		}
 		if err := u.store.SaveProfile(profile); err != nil {
-			return fmt.Errorf("save profile: %w", err)
+			return fmt.Errorf("%s: %w", i18n.T("profiles.error.save"), err)
 		}
 		u.refreshProfiles(profile.ID)
 		u.lastProfileID = profile.ID
 		if isEdit {
-			dialog.ShowInformation("Profile updated", fmt.Sprintf("Profile %s updated.", profile.DisplayName), u.win)
+			dialog.ShowInformation(i18n.T("profiles.info.updatedTitle"), i18n.T("profiles.info.updatedBody", profile.DisplayName), u.win)
 		} else {
-			dialog.ShowInformation("Profile created", fmt.Sprintf("Profile %s stored.", profile.DisplayName), u.win)
+			dialog.ShowInformation(i18n.T("profiles.info.createdTitle"), i18n.T("profiles.info.createdBody", profile.DisplayName), u.win)
 		}
 		return nil
 	})
@@ -177,28 +178,40 @@ func (u *UI) updateProfileDetail() {
 		return
 	}
 	if u.selectedProfile < 0 || u.selectedProfile >= len(u.profiles) {
-		u.profileDetailText.ParseMarkdown("_Select a profile to view details._")
+		u.profileDetailText.ParseMarkdown(i18n.T("profiles.detail.empty"))
 		return
 	}
 	p := u.profiles[u.selectedProfile]
 	lines := []string{
-		fmt.Sprintf("**Display Name:** %s", p.DisplayName),
-		fmt.Sprintf("**Company:** %s", p.CompanyName),
-		fmt.Sprintf("**Email:** %s", p.Email),
-		fmt.Sprintf("**Phone:** %s", p.Phone),
-		fmt.Sprintf("**Tax ID:** %s", p.TaxID),
-		"",
-		"**Address**",
-		strings.TrimSpace(p.AddressLine1),
-		strings.TrimSpace(p.AddressLine2),
-		fmt.Sprintf("%s %s", strings.TrimSpace(p.PostalCode), strings.TrimSpace(p.City)),
-		strings.TrimSpace(p.Country),
-		"",
-		"**Payment Details**",
-		fmt.Sprintf("Bank: %s", p.PaymentDetails.BankName),
-		fmt.Sprintf("IBAN: %s", p.PaymentDetails.IBAN),
-		fmt.Sprintf("BIC: %s", p.PaymentDetails.BIC),
-		fmt.Sprintf("Terms: %s", p.PaymentDetails.PaymentTerms),
+		i18n.T("profiles.detail.displayName", p.DisplayName),
+		i18n.T("profiles.detail.company", p.CompanyName),
+		i18n.T("profiles.detail.email", p.Email),
+		i18n.T("profiles.detail.phone", p.Phone),
+		i18n.T("profiles.detail.taxID", p.TaxID),
+	}
+	lines = append(lines, "")
+	lines = append(lines, i18n.T("profiles.detail.addressTitle"))
+	if line := strings.TrimSpace(p.AddressLine1); line != "" {
+		lines = append(lines, line)
+	}
+	if line := strings.TrimSpace(p.AddressLine2); line != "" {
+		lines = append(lines, line)
+	}
+	lines = append(lines, i18n.T("profiles.detail.cityPostal", strings.TrimSpace(p.PostalCode), strings.TrimSpace(p.City)))
+	lines = append(lines, i18n.T("profiles.detail.country", strings.TrimSpace(p.Country)))
+	lines = append(lines, "")
+	lines = append(lines, i18n.T("profiles.detail.paymentTitle"))
+	if val := strings.TrimSpace(p.PaymentDetails.BankName); val != "" {
+		lines = append(lines, i18n.T("profiles.detail.bank", val))
+	}
+	if val := strings.TrimSpace(p.PaymentDetails.IBAN); val != "" {
+		lines = append(lines, i18n.T("profiles.detail.iban", val))
+	}
+	if val := strings.TrimSpace(p.PaymentDetails.BIC); val != "" {
+		lines = append(lines, i18n.T("profiles.detail.bic", val))
+	}
+	if val := strings.TrimSpace(p.PaymentDetails.PaymentTerms); val != "" {
+		lines = append(lines, i18n.T("profiles.detail.paymentTerms", val))
 	}
 	u.profileDetailText.ParseMarkdown(strings.Join(lines, "\n"))
 }
