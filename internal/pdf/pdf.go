@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/janmarkuslanger/invoiceio/internal/i18n"
 	"github.com/janmarkuslanger/invoiceio/internal/models"
 )
 
@@ -49,27 +50,32 @@ func buildInvoiceLines(profile models.Profile, customer models.Customer, invoice
 		strings.TrimSpace(profile.AddressLine2),
 		fmt.Sprintf("%s %s", strings.TrimSpace(profile.PostalCode), strings.TrimSpace(profile.City)),
 		strings.TrimSpace(profile.Country),
-		fmt.Sprintf("Email: %s", strings.TrimSpace(profile.Email)),
-		fmt.Sprintf("Phone: %s", strings.TrimSpace(profile.Phone)),
-		fmt.Sprintf("Tax ID: %s", strings.TrimSpace(profile.TaxID)),
+		i18n.T("pdf.label.email", strings.TrimSpace(profile.Email)),
+		i18n.T("pdf.label.phone", strings.TrimSpace(profile.Phone)),
+		i18n.T("pdf.label.taxID", strings.TrimSpace(profile.TaxID)),
 		"",
-		fmt.Sprintf("Invoice Number: %s", invoice.Number),
-		fmt.Sprintf("Issued On: %s", invoice.IssueDate.Format("2006-01-02")),
-		fmt.Sprintf("Due Date: %s", invoice.DueDate.Format("2006-01-02")),
-		fmt.Sprintf("Generated: %s", now),
+		i18n.T("pdf.label.invoiceNumber", invoice.Number),
+		i18n.T("pdf.label.issuedOn", invoice.IssueDate.Format("2006-01-02")),
+		i18n.T("pdf.label.dueDate", invoice.DueDate.Format("2006-01-02")),
+		i18n.T("pdf.label.generatedOn", now),
 		"",
-		"Bill To:",
+		i18n.T("pdf.section.billTo"),
 		strings.TrimSpace(customer.DisplayName),
 		strings.TrimSpace(customer.ContactName),
 		strings.TrimSpace(customer.AddressLine1),
 		strings.TrimSpace(customer.AddressLine2),
 		fmt.Sprintf("%s %s", strings.TrimSpace(customer.PostalCode), strings.TrimSpace(customer.City)),
 		strings.TrimSpace(customer.Country),
-		fmt.Sprintf("Email: %s", strings.TrimSpace(customer.Email)),
-		fmt.Sprintf("Phone: %s", strings.TrimSpace(customer.Phone)),
+		i18n.T("pdf.label.email", strings.TrimSpace(customer.Email)),
+		i18n.T("pdf.label.phone", strings.TrimSpace(customer.Phone)),
 		"",
-		"Items:",
-		fmt.Sprintf("%-40s %6s %10s %12s", "Description", "Qty", "Unit", "Line Total"),
+		i18n.T("pdf.section.items"),
+		fmt.Sprintf("%-40s %6s %10s %12s",
+			i18n.T("pdf.items.column.description"),
+			i18n.T("pdf.items.column.quantity"),
+			i18n.T("pdf.items.column.unit"),
+			i18n.T("pdf.items.column.lineTotal"),
+		),
 		strings.Repeat("-", 70),
 	}
 
@@ -79,30 +85,30 @@ func buildInvoiceLines(profile models.Profile, customer models.Customer, invoice
 
 	lines = append(lines,
 		strings.Repeat("-", 70),
-		fmt.Sprintf("%-40s %28.2f", "Subtotal", invoice.Subtotal),
-		fmt.Sprintf("%-40s %27.2f (%0.2f%%)", "Tax", invoice.TaxAmount, invoice.TaxRatePercent),
-		fmt.Sprintf("%-40s %28.2f", "Total", invoice.Total),
+		fmt.Sprintf("%-40s %28.2f", i18n.T("pdf.label.subtotal"), invoice.Subtotal),
+		fmt.Sprintf("%-40s %27.2f (%0.2f%%)", i18n.T("pdf.label.tax"), invoice.TaxAmount, invoice.TaxRatePercent),
+		fmt.Sprintf("%-40s %28.2f", i18n.T("pdf.label.total"), invoice.Total),
 	)
 
 	if strings.TrimSpace(invoice.Notes) != "" {
-		lines = append(lines, "", "Notes:")
+		lines = append(lines, "", i18n.T("pdf.section.notes"))
 		for _, line := range strings.Split(invoice.Notes, "\n") {
 			lines = append(lines, line)
 		}
 	}
 
-	lines = append(lines, "", "Payment Details:")
+	lines = append(lines, "", i18n.T("pdf.section.paymentDetails"))
 	if profile.PaymentDetails.BankName != "" {
-		lines = append(lines, fmt.Sprintf("Bank: %s", profile.PaymentDetails.BankName))
+		lines = append(lines, i18n.T("pdf.label.bank", profile.PaymentDetails.BankName))
 	}
 	if profile.PaymentDetails.IBAN != "" {
-		lines = append(lines, fmt.Sprintf("IBAN: %s", profile.PaymentDetails.IBAN))
+		lines = append(lines, i18n.T("pdf.label.iban", profile.PaymentDetails.IBAN))
 	}
 	if profile.PaymentDetails.BIC != "" {
-		lines = append(lines, fmt.Sprintf("BIC: %s", profile.PaymentDetails.BIC))
+		lines = append(lines, i18n.T("pdf.label.bic", profile.PaymentDetails.BIC))
 	}
 	if profile.PaymentDetails.PaymentTerms != "" {
-		lines = append(lines, fmt.Sprintf("Terms: %s", profile.PaymentDetails.PaymentTerms))
+		lines = append(lines, i18n.T("pdf.label.terms", profile.PaymentDetails.PaymentTerms))
 	}
 
 	return sanitizeLines(lines)
