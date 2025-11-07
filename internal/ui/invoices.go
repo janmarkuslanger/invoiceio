@@ -3,7 +3,6 @@ package ui
 import (
 	"fmt"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -16,6 +15,7 @@ import (
 
 	"github.com/janmarkuslanger/invoiceio/internal/i18n"
 	"github.com/janmarkuslanger/invoiceio/internal/id"
+	"github.com/janmarkuslanger/invoiceio/internal/locale"
 	"github.com/janmarkuslanger/invoiceio/internal/models"
 	"github.com/janmarkuslanger/invoiceio/internal/pdf"
 )
@@ -94,6 +94,33 @@ func (u *UI) openInvoiceDialog(existing *models.Invoice) {
 	taxRate.SetPlaceHolder(i18n.T("invoices.form.taxRatePlaceholder"))
 	notes := widget.NewMultiLineEntry()
 	items := make([]models.InvoiceItem, 0)
+	type lineItemRow struct {
+		descEntry  *widget.Entry
+		qtyEntry   *widget.Entry
+		priceEntry *widget.Entry
+		totalLabel *widget.Label
+	}
+	var lineItemRows []*lineItemRow
+	status := widget.NewLabel("")
+	status.Wrapping = fyne.TextWrapWord
+	status.Hide()
+	statusNumericError := false
+	showError := func(message string) {
+		status.SetText(message)
+		status.Show()
+		statusNumericError = false
+	}
+	showNumericError := func(message string) {
+		status.SetText(message)
+		status.Show()
+		statusNumericError = true
+	}
+	clearNumericError := func() {
+		if statusNumericError {
+			status.Hide()
+			statusNumericError = false
+		}
+	}
 
 	defaultIssue := time.Now()
 	defaultDue := defaultIssue.AddDate(0, 0, 14)
@@ -155,8 +182,12 @@ func (u *UI) openInvoiceDialog(existing *models.Invoice) {
 		}
 		taxPercent := 0.0
 		if v := strings.TrimSpace(taxRate.Text); v != "" {
-			if f, err := strconv.ParseFloat(v, 64); err == nil {
+			if f, err := locale.ParseFloat(v); err == nil {
 				taxPercent = f
+				clearNumericError()
+			} else {
+				showNumericError(i18n.T("invoices.error.taxRateFormat"))
+				return
 			}
 		}
 		taxAmount := subtotal * (taxPercent / 100)
@@ -173,7 +204,9 @@ func (u *UI) openInvoiceDialog(existing *models.Invoice) {
 	var renderLineItems func()
 	renderLineItems = func() {
 		lineItemsContainer.Objects = nil
+		lineItemRows = lineItemRows[:0]
 		if len(items) == 0 {
+			lineItemRows = nil
 			lineItemsContainer.Add(widget.NewLabel(i18n.T("invoices.lineItems.empty", i18n.T("invoices.lineItems.add"))))
 			updateTotals()
 			lineItemsContainer.Refresh()
@@ -198,19 +231,22 @@ func (u *UI) openInvoiceDialog(existing *models.Invoice) {
 			totalValue := widget.NewLabel(fmt.Sprintf("%.2f", item.LineTotal))
 
 			recalculate := func() {
-				qtyVal, err := strconv.ParseFloat(strings.TrimSpace(qtyEntry.Text), 64)
+				qtyVal, err := locale.ParseFloat(strings.TrimSpace(qtyEntry.Text))
 				if err != nil {
-					qtyVal = 0
+					showNumericError(i18n.T("invoices.error.lineItemQuantityInvalid", idx+1))
+					return
 				}
-				priceVal, err := strconv.ParseFloat(strings.TrimSpace(priceEntry.Text), 64)
+				priceVal, err := locale.ParseFloat(strings.TrimSpace(priceEntry.Text))
 				if err != nil {
-					priceVal = 0
+					showNumericError(i18n.T("invoices.error.lineItemUnitPriceInvalid", idx+1))
+					return
 				}
 				items[idx].Quantity = qtyVal
 				items[idx].UnitPrice = priceVal
 				items[idx].LineTotal = qtyVal * priceVal
 				totalValue.SetText(fmt.Sprintf("%.2f", items[idx].LineTotal))
 				updateTotals()
+				clearNumericError()
 			}
 			qtyEntry.OnChanged = func(string) { recalculate() }
 			priceEntry.OnChanged = func(string) { recalculate() }
@@ -229,6 +265,12 @@ func (u *UI) openInvoiceDialog(existing *models.Invoice) {
 				removeButton,
 			)
 			lineItemsContainer.Add(row)
+			lineItemRows = append(lineItemRows, &lineItemRow{
+				descEntry:  descEntry,
+				qtyEntry:   qtyEntry,
+				priceEntry: priceEntry,
+				totalLabel: totalValue,
+			})
 		}
 		updateTotals()
 		lineItemsContainer.Refresh()
@@ -283,9 +325,6 @@ func (u *UI) openInvoiceDialog(existing *models.Invoice) {
 
 	save := widget.NewButton(submitLabel, nil)
 	cancel := widget.NewButton(i18n.T("common.cancel"), nil)
-	status := widget.NewLabel("")
-	status.Wrapping = fyne.TextWrapWord
-	status.Hide()
 
 	buttons := container.NewHBox(layout.NewSpacer(), cancel, save)
 	dialogContent := container.NewBorder(content, container.NewVBox(status, buttons), nil, nil, nil)
@@ -296,56 +335,74 @@ func (u *UI) openInvoiceDialog(existing *models.Invoice) {
 		dlg.Hide()
 	}
 
+	validateLineItems := func() bool {
+		for idx := range lineItemRows {
+			row := lineItemRows[idx]
+			qtyVal, err := locale.ParseFloat(strings.TrimSpace(row.qtyEntry.Text))
+			if err != nil {
+				showNumericError(i18n.T("invoices.error.lineItemQuantityInvalid", idx+1))
+				return false
+			}
+			priceVal, err := locale.ParseFloat(strings.TrimSpace(row.priceEntry.Text))
+			if err != nil {
+				showNumericError(i18n.T("invoices.error.lineItemUnitPriceInvalid", idx+1))
+				return false
+			}
+			items[idx].Quantity = qtyVal
+			items[idx].UnitPrice = priceVal
+			items[idx].LineTotal = qtyVal * priceVal
+			row.totalLabel.SetText(fmt.Sprintf("%.2f", items[idx].LineTotal))
+		}
+		clearNumericError()
+		return true
+	}
+
 	save.OnTapped = func() {
 		if len(profileOptions) == 0 || len(customerOptions) == 0 {
-			status.SetText(i18n.T("invoices.error.setupRequired"))
-			status.Show()
+			showError(i18n.T("invoices.error.setupRequired"))
 			return
 		}
 		profileLabel := profileSelect.Selected
 		customerLabel := customerSelect.Selected
 		if profileLabel == "" || customerLabel == "" {
-			status.SetText(i18n.T("invoices.error.selectionRequired"))
-			status.Show()
+			showError(i18n.T("invoices.error.selectionRequired"))
 			return
 		}
 		profileModel, ok := u.profileByLabel(profileLabel)
 		if !ok {
-			status.SetText(i18n.T("invoices.error.profileMissing"))
-			status.Show()
+			showError(i18n.T("invoices.error.profileMissing"))
 			return
 		}
 		customerModel, ok := u.customerByLabel(customerLabel)
 		if !ok {
-			status.SetText(i18n.T("invoices.error.customerMissing"))
-			status.Show()
+			showError(i18n.T("invoices.error.customerMissing"))
 			return
 		}
 		if len(items) == 0 {
-			status.SetText(i18n.T("invoices.error.noItems"))
-			status.Show()
+			showError(i18n.T("invoices.error.noItems"))
+			return
+		}
+		if !validateLineItems() {
 			return
 		}
 		issue, err := time.Parse("2006-01-02", strings.TrimSpace(issueDate.Text))
 		if err != nil {
-			status.SetText(i18n.T("invoices.error.issueDate"))
-			status.Show()
+			showError(i18n.T("invoices.error.issueDate"))
 			return
 		}
 		due, err := time.Parse("2006-01-02", strings.TrimSpace(dueDate.Text))
 		if err != nil {
-			status.SetText(i18n.T("invoices.error.dueDate"))
-			status.Show()
+			showError(i18n.T("invoices.error.dueDate"))
 			return
 		}
 		taxPercent := 0.0
 		if strings.TrimSpace(taxRate.Text) != "" {
-			taxPercent, err = strconv.ParseFloat(strings.TrimSpace(taxRate.Text), 64)
+			taxPercent, err = locale.ParseFloat(strings.TrimSpace(taxRate.Text))
 			if err != nil {
-				status.SetText(i18n.T("invoices.error.taxRate"))
-				status.Show()
+				showNumericError(i18n.T("invoices.error.taxRateFormat"))
 				return
 			}
+			clearNumericError()
 		}
 
 		subtotal := 0.0
@@ -394,13 +451,11 @@ func (u *UI) openInvoiceDialog(existing *models.Invoice) {
 		}
 
 		if err := u.store.SaveInvoice(invoice); err != nil {
-			status.SetText(i18n.T("invoices.error.saveFailed", err))
-			status.Show()
+			showError(i18n.T("invoices.error.saveFailed", err))
 			return
 		}
 		if err := pdf.CreateInvoicePDF(pdfPath, profileModel, customerModel, invoice); err != nil {
-			status.SetText(i18n.T("invoices.error.pdfFailed", err))
-			status.Show()
+			showError(i18n.T("invoices.error.pdfFailed", err))
 			return
 		}
 
