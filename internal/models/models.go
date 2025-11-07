@@ -68,6 +68,7 @@ type Invoice struct {
 	TaxAmount      float64       `json:"tax_amount"`
 	Total          float64       `json:"total"`
 	PDFPath        string        `json:"pdf_path"`
+	PaidAt         time.Time     `json:"paid_at"`
 	CreatedAt      time.Time     `json:"created_at"`
 	UpdatedAt      time.Time     `json:"updated_at"`
 }

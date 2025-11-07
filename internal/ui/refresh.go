@@ -133,17 +133,10 @@ func (u *UI) refreshInvoices(selectedIDs ...string) {
 		}
 	}
 
-	if u.invoiceEditButton != nil {
-		if u.selectedInvoice >= 0 {
-			u.invoiceEditButton.Enable()
-		} else {
-			u.invoiceEditButton.Disable()
-		}
-	}
-
 	if u.selectedInvoice >= 0 && u.invoiceList != nil && u.selectedInvoice < len(u.invoices) {
 		u.invoiceList.Select(u.selectedInvoice)
 	} else {
 		u.updateInvoiceDetail()
 	}
+	u.updateInvoiceActionButtons()
 }

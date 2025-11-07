@@ -82,6 +82,9 @@ func (u *UI) customerByID(id string) (models.Customer, bool) {
 }
 
 func invoiceBadge(inv models.Invoice) string {
+	if !inv.PaidAt.IsZero() {
+		return i18n.T("invoices.badge.paid")
+	}
 	now := time.Now()
 	if inv.DueDate.Before(now) {
 		return i18n.T("invoices.badge.overdue")
@@ -103,4 +106,29 @@ func contains(values []string, target string) bool {
 
 func makeHeaderLabel(text string) *widget.Label {
 	return widget.NewLabelWithStyle(text, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+}
+
+func (u *UI) updateInvoiceActionButtons() {
+	if u.invoiceEditButton != nil {
+		if u.selectedInvoice >= 0 {
+			u.invoiceEditButton.Enable()
+		} else {
+			u.invoiceEditButton.Disable()
+		}
+	}
+	if u.invoicePayButton == nil {
+		return
+	}
+	if u.selectedInvoice >= 0 && u.selectedInvoice < len(u.invoices) {
+		inv := u.invoices[u.selectedInvoice]
+		if inv.PaidAt.IsZero() {
+			u.invoicePayButton.SetText(i18n.T("invoices.button.markPaid"))
+		} else {
+			u.invoicePayButton.SetText(i18n.T("invoices.button.markUnpaid"))
+		}
+		u.invoicePayButton.Enable()
+	} else {
+		u.invoicePayButton.SetText(i18n.T("invoices.button.markPaid"))
+		u.invoicePayButton.Disable()
+	}
 }

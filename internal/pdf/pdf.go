@@ -58,6 +58,11 @@ func buildInvoiceLines(profile models.Profile, customer models.Customer, invoice
 		i18n.T("pdf.label.issuedOn", invoice.IssueDate.Format("2006-01-02")),
 		i18n.T("pdf.label.dueDate", invoice.DueDate.Format("2006-01-02")),
 		i18n.T("pdf.label.generatedOn", now),
+	}
+	if !invoice.PaidAt.IsZero() {
+		lines = append(lines, i18n.T("pdf.label.paidOn", invoice.PaidAt.Format("2006-01-02")))
+	}
+	lines = append(lines,
 		"",
 		i18n.T("pdf.section.billTo"),
 		strings.TrimSpace(customer.DisplayName),
@@ -77,7 +82,7 @@ func buildInvoiceLines(profile models.Profile, customer models.Customer, invoice
 			i18n.T("pdf.items.column.lineTotal"),
 		),
 		strings.Repeat("-", 70),
-	}
+	)
 
 	for _, item := range invoice.Items {
 		lines = append(lines, fmt.Sprintf("%-40s %6.2f %10.2f %12.2f", item.Description, item.Quantity, item.UnitPrice, item.LineTotal))

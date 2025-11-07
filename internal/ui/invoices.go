@@ -38,11 +38,14 @@ func (u *UI) makeInvoicesTab() fyne.CanvasObject {
 	)
 	u.invoiceList.OnSelected = func(id widget.ListItemID) {
 		if id < 0 || id >= len(u.invoices) {
+			u.selectedInvoice = -1
+			u.updateInvoiceDetail()
+			u.updateInvoiceActionButtons()
 			return
 		}
 		u.selectedInvoice = id
 		u.updateInvoiceDetail()
-		u.invoiceEditButton.Enable()
+		u.updateInvoiceActionButtons()
 	}
 
 	newButton := widget.NewButtonWithIcon(i18n.T("invoices.button.new"), themePlusIcon(), func() {
@@ -57,7 +60,12 @@ func (u *UI) makeInvoicesTab() fyne.CanvasObject {
 	})
 	u.invoiceEditButton.Disable()
 
-	actionBar := container.NewHBox(newButton, u.invoiceEditButton)
+	u.invoicePayButton = widget.NewButton(i18n.T("invoices.button.markPaid"), func() {
+		u.toggleInvoicePaid()
+	})
+	u.invoicePayButton.Disable()
+
+	actionBar := container.NewHBox(newButton, u.invoiceEditButton, u.invoicePayButton)
 
 	split := container.NewHSplit(
 		container.NewMax(u.invoiceList),
@@ -417,11 +425,13 @@ func (u *UI) openInvoiceDialog(existing *models.Invoice) {
 		invoiceNumber := ""
 		pdfPath := ""
 		createdAt := now
+		paidAt := time.Time{}
 		if isEdit {
 			invoiceID = current.ID
 			invoiceNumber = current.Number
 			pdfPath = current.PDFPath
 			createdAt = current.CreatedAt
+			paidAt = current.PaidAt
 		} else {
 			invoiceID = id.New()
 		}
@@ -446,6 +456,7 @@ func (u *UI) openInvoiceDialog(existing *models.Invoice) {
 			TaxAmount:      taxAmount,
 			Total:          total,
 			PDFPath:        pdfPath,
+			PaidAt:         paidAt,
 			CreatedAt:      createdAt,
 			UpdatedAt:      now,
 		}
@@ -492,13 +503,17 @@ func (u *UI) updateInvoiceDetail() {
 		profileName = prof.DisplayName
 	}
 	status := invoiceBadge(inv)
-	now := time.Now()
-	daysUntilDue := int(inv.DueDate.Sub(now).Hours() / 24)
 	dueDescriptor := ""
-	if daysUntilDue < 0 {
-		dueDescriptor = i18n.T("invoices.due.overdueBy", -daysUntilDue)
+	if !inv.PaidAt.IsZero() {
+		dueDescriptor = i18n.T("invoices.due.paidOn", inv.PaidAt.Format("2006-01-02"))
 	} else {
-		dueDescriptor = i18n.T("invoices.due.inDays", daysUntilDue)
+		now := time.Now()
+		daysUntilDue := int(inv.DueDate.Sub(now).Hours() / 24)
+		if daysUntilDue < 0 {
+			dueDescriptor = i18n.T("invoices.due.overdueBy", -daysUntilDue)
+		} else {
+			dueDescriptor = i18n.T("invoices.due.inDays", daysUntilDue)
+		}
 	}
 
 	lines := []string{
@@ -512,9 +527,14 @@ func (u *UI) updateInvoiceDetail() {
 		i18n.T("invoices.detail.tax", inv.TaxAmount, inv.TaxRatePercent),
 		i18n.T("invoices.detail.total", inv.Total),
 		i18n.T("invoices.detail.pdf", inv.PDFPath),
+	}
+	if !inv.PaidAt.IsZero() {
+		lines = append(lines, i18n.T("invoices.detail.paidOn", inv.PaidAt.Format("2006-01-02")))
+	}
+	lines = append(lines,
 		"",
 		i18n.T("invoices.detail.lineItems"),
-	}
+	)
 	for _, item := range inv.Items {
 		lines = append(lines, i18n.T("invoices.detail.lineItem", item.Description, item.Quantity, item.UnitPrice, item.LineTotal))
 	}
@@ -522,4 +542,27 @@ func (u *UI) updateInvoiceDetail() {
 		lines = append(lines, "", i18n.T("invoices.detail.notesTitle"), inv.Notes)
 	}
 	u.invoiceDetailText.ParseMarkdown(strings.Join(lines, "\n"))
+}
+
+func (u *UI) toggleInvoicePaid() {
+	if u.selectedInvoice < 0 || u.selectedInvoice >= len(u.invoices) {
+		return
+	}
+	inv := u.invoices[u.selectedInvoice]
+	markingPaid := inv.PaidAt.IsZero()
+	if markingPaid {
+		inv.PaidAt = time.Now()
+	} else {
+		inv.PaidAt = time.Time{}
+	}
+	if err := u.store.SaveInvoice(inv); err != nil {
+		dialog.ShowError(fmt.Errorf(i18n.T("invoices.error.updatePaid", err)), u.win)
+		return
+	}
+	if markingPaid {
+		dialog.ShowInformation(i18n.T("invoices.info.markedPaidTitle"), i18n.T("invoices.info.markedPaidBody", inv.Number), u.win)
+	} else {
+		dialog.ShowInformation(i18n.T("invoices.info.markedUnpaidTitle"), i18n.T("invoices.info.markedUnpaidBody", inv.Number), u.win)
+	}
+	u.refreshInvoices(inv.ID)
 }

@@ -36,6 +36,7 @@ type UI struct {
 	invoiceList       *widget.List
 	invoiceDetailText *widget.RichText
 	invoiceEditButton *widget.Button
+	invoicePayButton  *widget.Button
 	selectedInvoice   int
 
 	lastProfileID  string
